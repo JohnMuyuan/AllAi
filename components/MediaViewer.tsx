@@ -3,16 +3,20 @@
 import { Copy, Download, ImagePlus, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ChatAttachment } from "@/lib/types";
-import { useT } from "./I18n";
+import { useT, type Translate } from "./I18n";
 import { VideoPlayer } from "./VideoPlayer";
 
 export type StudioOutput = { id: string; mime: string; prompt?: string };
 
-export function uploadDragPayload(output: StudioOutput): ChatAttachment {
+/** `t` 由调用方传进来：这个函数不在组件里，拿不到 hook。 */
+export function uploadDragPayload(
+  output: StudioOutput,
+  t: Translate = (text) => text,
+): ChatAttachment {
   const image = output.mime.startsWith("image/");
   return {
     id: output.id,
-    name: image ? "参考图.png" : "参考视频.mp4",
+    name: image ? t("参考图.png") : t("参考视频.mp4"),
     mime: output.mime,
     kind: image ? "image" : output.mime.startsWith("video/") ? "video" : "file",
   };
@@ -90,7 +94,7 @@ export function MediaViewer({
               onToast(t("请用图片作参考"));
               return;
             }
-            onUseReference(uploadDragPayload(output));
+            onUseReference(uploadDragPayload(output, t));
             onClose();
           }}
           className="grid size-9 place-items-center rounded-lg text-white/80 hover:bg-white/10"

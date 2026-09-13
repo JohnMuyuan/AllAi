@@ -49,7 +49,7 @@ export function GlobalEndpointsPanel({
       ...current,
       {
         id: crypto.randomUUID(),
-        label: `全局接口 ${current.length + 1}`,
+        label: t("全局接口 {n}", { n: current.length + 1 }),
         mode: "api",
         apiKey: "",
         baseUrl: "",
@@ -64,9 +64,9 @@ export function GlobalEndpointsPanel({
   async function remove(id: string) {
     const target = drafts.find((item) => item.id === id);
     const ok = await confirm({
-      title: `删除「${target?.label || "这个接口"}」？`,
-      detail: "所有 Agent 的接口列表里都会少掉它。正在用它的 Agent 会回到自己的接口。",
-      confirmText: "删除",
+      title: t("删除「{name}」？", { name: target?.label || t("这个接口") }),
+      detail: t("所有 Agent 的接口列表里都会少掉它。正在用它的 Agent 会回到自己的接口。"),
+      confirmText: t("删除"),
       danger: true,
     });
     if (!ok) return;

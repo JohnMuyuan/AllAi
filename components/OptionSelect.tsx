@@ -5,10 +5,10 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "./I18n";
 
-type Option = { value: string; label: string; description?: string };
+type Option = { value: string; label: string; description?: string; icon?: ReactNode };
 
 /** Shared compact picker; the portal keeps menus clear of scroll containers. */
-export function OptionSelect({ label, value, options, onChange, disabled, icon, compact = false }: {
+export function OptionSelect({ label, value, options, onChange, disabled, icon, compact = false, hideLabel = false }: {
   label: string;
   value: string;
   options: Option[];
@@ -16,6 +16,12 @@ export function OptionSelect({ label, value, options, onChange, disabled, icon, 
   disabled?: boolean;
   icon?: ReactNode;
   compact?: boolean;
+  /**
+   * 紧凑模式下只显示选中的那一项，不显示「推理 ·」这种前缀。
+   * 英文比中文长一截，前缀会把同一行的按钮挤到下一排（约定 96）。
+   * 名字还是留在 aria-label 里，读屏和自动化测试不受影响。
+   */
+  hideLabel?: boolean;
 }) {
   const t = useT();
   const id = useId();
@@ -24,6 +30,7 @@ export function OptionSelect({ label, value, options, onChange, disabled, icon, 
   const [position, setPosition] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number } | null>(null);
   const selected = options.find((option) => option.value === value);
   const open = Boolean(position) && !disabled;
+  const lead = icon ?? selected?.icon;
 
   function close(restore = false) {
     setPosition(null);
@@ -66,7 +73,11 @@ export function OptionSelect({ label, value, options, onChange, disabled, icon, 
       aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       onClick={() => open ? close() : show()}
       onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); show(); } }}>
-      {icon}<span className="min-w-0 truncate">{compact ? `${t(label)} · ` : ""}{selected ? t(selected.label) : t("未选择")}</span>
+      {lead}
+      <span className="min-w-0 truncate">
+        {compact && !hideLabel ? `${t(label)} · ` : ""}
+        {selected ? t(selected.label) : t("未选择")}
+      </span>
       <ChevronDown className={`ml-auto size-3.5 shrink-0 text-muted ${open ? "rotate-180" : ""}`} />
     </button>
     {open && createPortal(<div ref={menu} id={id} role="menu" aria-label={t(label)} style={position!}
@@ -85,6 +96,8 @@ export function OptionSelect({ label, value, options, onChange, disabled, icon, 
       {options.map((option) => <button key={option.value} type="button" role="menuitemradio"
         aria-checked={option.value === value} tabIndex={-1} className="ui-option"
         onClick={() => { onChange(option.value); close(true); }}>
+        {/* 不管有没有图标都占同一格：不然带图标的选项会比不带的缩进一截，看着像错位。 */}
+        <span className="grid size-4 shrink-0 place-items-center">{option.icon}</span>
         <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t(option.label)}</span>
           {option.description && <span className="mt-0.5 block text-xs text-muted">{t(option.description)}</span>}</span>
         {option.value === value && <Check className="size-4 shrink-0 text-accent" />}

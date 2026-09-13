@@ -19,6 +19,7 @@ import os from "os";
 import path from "path";
 import { scanHistory, type AgentMessage, type AgentWork } from "./history";
 import { mergeWorks, scanLive } from "./live";
+import { logLine } from "./log";
 import { startWorkWatch } from "./watch";
 import {
   PAIR_TTL_MS,
@@ -372,7 +373,15 @@ function connect() {
   };
   ws.onmessage = (event) => {
     if (socket !== ws) return;
-    void onRelay(String(event.data));
+    /*
+     * onRelay 是 async，里面的 await（解密、建会话、给手机盯 Agent 文件）
+     * 都可能抛。以前没有 catch：一次抛错就是一个未处理 rejection，
+     * 手机会停在工作界面上却再也收不到新消息，而这边的心跳还以为连接是好的。
+     * 至少要把原因写进日志，不然排查时一个字都看不到。
+     */
+    void onRelay(String(event.data)).catch((error: unknown) => {
+      logLine(`remote: onRelay 出错：${error instanceof Error ? error.message : String(error)}`);
+    });
   };
   ws.onerror = () => undefined;
   ws.onclose = (event) => {
@@ -462,7 +471,9 @@ async function onRelay(raw: string) {
       record(deviceName(from), "连上了");
       pushStatus();
     }
-    void handleRpc(session, request);
+    void handleRpc(session, request).catch((error: unknown) => {
+      logLine(`remote: handleRpc 出错：${error instanceof Error ? error.message : String(error)}`);
+    });
     return;
   }
   const plain = envelope.p;

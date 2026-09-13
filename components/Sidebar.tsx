@@ -226,12 +226,12 @@ export function Sidebar({
               <span className="truncate">{work.title}</span>
               {chain ? (
                 <span className="ml-auto shrink-0 rounded-md bg-user px-1.5 py-px text-[10px] text-muted">
-                  共 {chain.count} 段
+                  {t("共 {n} 段", { n: chain.count })}
                 </span>
               ) : null}
             </div>
             <div className="truncate text-[11px] text-muted">
-              {childIndex ? `接续 ${childIndex} · ` : ""}
+              {childIndex ? t("接续 {n} · ", { n: childIndex }) : ""}
               {work.agentName}
               {work.running ? ` · ${t("运行中")}` : work.online ? ` · ${t("在线")}` : ""}
             </div>

@@ -22,7 +22,8 @@ import {
   type OfficialChatKind,
 } from "@/lib/official-chat";
 import {
-  compactNotice,
+  COMPACT_NOTICE,
+  compactNoticeVars,
   contextLimit,
   contextStatus,
   estimateMessagesTokens,
@@ -39,7 +40,7 @@ import {
 import { getDesktop } from "@/lib/desktop";
 import { applyTheme, readThemeMode, saveThemeMode, watchSystemTheme, type ThemeMode } from "@/lib/theme";
 import { type LangMode } from "@/lib/i18n";
-import { useLangState, useT } from "./I18n";
+import { useLang, useLangState, useT } from "./I18n";
 import { firstModelKey, parseModelKey, titleFrom } from "@/lib/public";
 import { readSse } from "@/lib/sse-client";
 import { permissionOptions, resolvePermission } from "@/lib/permission-mode";
@@ -83,6 +84,7 @@ import { SearchPalette } from "./SearchPalette";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar, type AppView } from "./Sidebar";
 import { modelInfo } from "./ModelSwitch";
+import { ModelIcon } from "./ModelIcon";
 import {
   buildRemoteSnapshot,
   useRemoteBridge,
@@ -296,6 +298,9 @@ export function ChatApp() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
   const { langMode, setLangMode } = useLangState();
   const t = useT();
+  const lang = useLang();
+  /** 中文用全角顿号、英文用半角逗号 —— 列表的连字符得跟着语言走。 */
+  const joiner = lang === "en" ? ", " : "、";
   const [toast, setToast] = useState("");
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<AppView>("chat");
@@ -720,15 +725,15 @@ export function ChatApp() {
       const week = quotaMark(quota.weekPct);
       quotaMarkRef.current[spec.kind] = { five, week };
       const parts: string[] = [];
-      if (five > prev.five) parts.push(`近 5 小时已用到 ${five}%`);
-      if (week > prev.week) parts.push(`近 7 天已用到 ${week}%`);
+      if (five > prev.five) parts.push(t("近 5 小时已用到 {n}%", { n: five }));
+      if (week > prev.week) parts.push(t("近 7 天已用到 {n}%", { n: week }));
       if (!parts.length) continue;
       void desktop.notify({
-        title: "AllAi 额度",
-        body: `${spec.name} ${parts.join("，")}`,
+        title: t("AllAi 额度"),
+        body: `${t(spec.name)} ${parts.join(joiner)}`,
       });
     }
-  }, [isDesktop, prefs.notifyQuota, officialQuota]);
+  }, [isDesktop, prefs.notifyQuota, officialQuota, t, joiner]);
 
   useEffect(() => {
     if (!isDesktop || view !== "agents") return;
@@ -833,7 +838,7 @@ export function ChatApp() {
           addStep(
             officialTurn.assistantId,
             "notice",
-            `${event.reason}，这一轮从头开始，之前的上下文没带上`,
+            t("{reason}，这一轮从头开始，之前的上下文没带上", { reason: event.reason }),
           );
           setActive((prev) => {
             if (!prev || prev.id !== officialTurn.conversationId) return prev;
@@ -890,7 +895,7 @@ export function ChatApp() {
           setHandoff((current) => (current.running ? { ...current, phase: "生成摘要", chars } : current));
         }
         if (event.type === "error") {
-          pushHandoffStep(`出错：${event.message}`);
+          pushHandoffStep(t("出错：{message}", { message: event.message }));
         }
         // 这一轮没有属于自己的助手气泡，落下去只会接到**上一轮**那条回复后面，
         // 把旧工作最后一条弄脏（文件监视器随后会覆盖回来，中间那几秒用户看得见）。
@@ -912,7 +917,14 @@ export function ChatApp() {
               if (!last || last.role !== "assistant") return current;
               return current.map((item) =>
                 item.id === last.id
-                  ? { ...item, trace: upsertToolTrace(item.trace, "压缩上下文", `CLI 正在压缩… ${detail.slice(0, 80)}`) }
+                  ? {
+                      ...item,
+                      trace: upsertToolTrace(
+                        item.trace,
+                        t("压缩上下文"),
+                        t("CLI 正在压缩… {detail}", { detail: detail.slice(0, 80) }),
+                      ),
+                    }
                   : item,
               );
             });
@@ -997,7 +1009,11 @@ export function ChatApp() {
             item.id === last.id
               ? {
                   ...item,
-                  trace: appendToolTrace(item.trace, "上下文重置", `${event.reason}，这一轮从头开始`),
+                  trace: appendToolTrace(
+                    item.trace,
+                    t("上下文重置"),
+                    t("{reason}，这一轮从头开始", { reason: event.reason }),
+                  ),
                 }
               : item,
           );
@@ -1041,7 +1057,7 @@ export function ChatApp() {
         if (prefsRef.current.notifyAgentDone !== false) {
           const work = works.find((item) => item.id === sessionId);
           const title = workOverrides[sessionId]?.title || work?.title || "Agent";
-          void desktopNow?.notify?.({ title: "AllAi", body: `「${title}」做完了` });
+          void desktopNow?.notify?.({ title: "AllAi", body: t("「{title}」做完了", { title }) });
         }
       }
     });
@@ -1123,14 +1139,24 @@ export function ChatApp() {
     setMobileOpen(false);
   }
 
+  /*
+   * 记住最近一次点的是哪条。大对话要读一整个文件，加载有快有慢：
+   * 点了 A 又马上点 B 时，A 的结果后到会把界面整块换成 A 的内容
+   * （侧栏还高亮着 B），连模型和思考档位都被改成 A 的。
+   * 所以拿到结果先对一下，还是不是当前要打开的那条。
+   */
+  const selectedConversationRef = useRef<string | null>(null);
+
   async function selectConversation(id: string) {
     interruptChat();
+    selectedConversationRef.current = id;
     const response = await fetch(`/api/conversations/${id}`);
     if (!response.ok) {
-      showToast("打不开这条对话");
+      if (selectedConversationRef.current === id) showToast("打不开这条对话");
       return;
     }
     const data = (await response.json()) as { conversation: Conversation };
+    if (selectedConversationRef.current !== id) return;
     setActive(data.conversation);
     if (data.conversation.modelKey) {
       setModelKey(data.conversation.modelKey);
@@ -1241,7 +1267,7 @@ export function ChatApp() {
         showToast(result.ok ? "没有检测到登录，请再试一次" : result.error);
         return;
       }
-      showToast(`${spec.name}已登录`);
+      showToast(t("{name}已登录", { name: spec.name }));
       // 登录成功后把真正可用的型号拉下来，别停在写死的兜底列表上。
       const provider = findOfficialProvider(providers, kind);
       if (provider && desktop.cliListModels) {
@@ -1278,7 +1304,7 @@ export function ChatApp() {
       setModelKey((current) =>
         officialSpecForModelKey(current)?.kind === kind ? firstModelKey(providers) : current,
       );
-      showToast(`已退出${spec.name}`);
+      showToast(t("已退出{name}", { name: spec.name }));
     } finally {
       setOfficialBusy(null);
     }
@@ -1378,7 +1404,7 @@ export function ChatApp() {
         messages.push({
           id: userMessageId,
           role: "user",
-          content: content || (outgoing.length ? `（${outgoing.length} 个附件）` : ""),
+          content: content || (outgoing.length ? t("（{n} 个附件）", { n: outgoing.length }) : ""),
           attachments: outgoing.length ? outgoing : undefined,
           computerRun: override?.computerRun,
           computerGoal: override?.computerGoal,
@@ -1463,11 +1489,11 @@ export function ChatApp() {
       }
       const status = officialStatus[official.kind];
       if (status && !status.installed) {
-        bail(`请先安装 ${official.cliName}`);
+        bail(t("请先安装 {name}", { name: official.cliName }));
         return;
       }
       if (status && !status.loggedIn) {
-        bail(`请先在设置里登录${official.name}`);
+        bail(t("请先在设置里登录{name}", { name: official.name }));
         return;
       }
       // 重新生成等于 AllAi 删除旧回答后从最后一条用户消息重新分叉。
@@ -1566,7 +1592,7 @@ export function ChatApp() {
               addStep(
                 assistantMessageId,
                 "notice",
-                compactNotice(built.compaction, officialLimit.tokens),
+                t(COMPACT_NOTICE, compactNoticeVars(built.compaction, officialLimit.tokens)),
               );
             }
             if (built.summary) {
@@ -1590,7 +1616,11 @@ ${built.summary}`,
           }
         } catch {
           // 捞不到上下文也要让这轮发出去，但得说一声
-          addStep(assistantMessageId, "notice", "没能把之前的对话交给新模型，它可能不记得前面聊过什么");
+          addStep(
+            assistantMessageId,
+            "notice",
+            t("没能把之前的对话交给新模型，它可能不记得前面聊过什么"),
+          );
         }
       }
 
@@ -1608,20 +1638,32 @@ ${built.summary}`,
         delivered: priorMessages + (mode === "regenerate" ? 1 : 2),
         modelId: officialModelId(key),
       };
-      const result = await desktop.officialChat({
-        kind: official.kind,
-        sessionId,
-        prompt,
-        resumeId,
-        model: officialModelId(key),
-        effort: reasoning,
-        webSearch: prefs.webSearchChat,
-        history: history.length ? history : undefined,
-        elevated: prefs.cliAdminChat,
-      });
-      if (!result.ok) {
+      /*
+       * 官方登录（本机 CLI）这条路的 await 必须自己接住异常。它在 HTTP 那条
+       * try/finally 的**外面**，IPC 一抛（终端宿主没起来、宿主中途掉线、
+       * invoke 超时）就直接跳出整个 send()，finally 里的 streamingRef=false
+       * 永远执行不到 —— 界面一直转圈，之后每次发送都被 streamingRef 挡掉，
+       * 只能重启软件。错误照样进对话流（bail → failChat），不弹窗。
+       */
+      try {
+        const result = await desktop.officialChat({
+          kind: official.kind,
+          sessionId,
+          prompt,
+          resumeId,
+          model: officialModelId(key),
+          effort: reasoning,
+          webSearch: prefs.webSearchChat,
+          history: history.length ? history : undefined,
+          elevated: prefs.cliAdminChat,
+        });
+        if (!result.ok) {
+          officialTurnRef.current = null;
+          bail(result.error);
+        }
+      } catch (error) {
         officialTurnRef.current = null;
-        bail(result.error);
+        bail(error instanceof Error ? error.message : "发送失败");
       }
       return;
     }
@@ -1883,7 +1925,10 @@ ${built.summary}`,
       used,
       limit: limit.tokens,
       level: status.level,
-      note: reported ? `${limit.note}，占用取自接口回报` : `${limit.note}（估算）`,
+      // 拼成模板再翻：直接把 note 拼进字符串会生成新 key，词典永远对不上。
+      note: reported
+        ? t("{note}，占用取自接口回报", { note: t(limit.note) })
+        : t("{note}（估算）", { note: t(limit.note) }),
     };
   }, [
     active?.compaction,
@@ -1896,6 +1941,7 @@ ${built.summary}`,
     prefs.compactPercent,
     prefs.contextLimits,
     usageEvents,
+    t,
   ]);
   const agentContext = useMemo(() => {
     const table = contextLimit(agentModelId, prefs.contextLimits);
@@ -1907,10 +1953,10 @@ ${built.summary}`,
       table.source === "override" ? table.tokens : reported?.window || table.tokens;
     const note =
       table.source === "override"
-        ? table.note
+        ? t(table.note)
         : reported?.window
-          ? "CLI 自己报的窗口大小"
-          : table.note;
+          ? t("CLI 自己报的窗口大小")
+          : t(table.note);
     if (reported) {
       const status = contextStatus(reported.tokens, limit, prefs.compactPercent);
       return { used: reported.tokens, limit, level: status.level, note };
@@ -1933,6 +1979,7 @@ ${built.summary}`,
     prefs.compactPercent,
     prefs.contextLimits,
     workOverrides,
+    t,
   ]);
   // 用量记录只增不删（产品约定 25），别每次渲染都从头遍历一遍。
   const convUsage = useMemo(
@@ -1942,7 +1989,15 @@ ${built.summary}`,
   /** 当前聊天模型和它来自哪个服务：统计行和空状态的「XX 愿意为您提供帮助」都用它。 */
   const chatModelSource = useMemo(() => {
     const info = modelInfo(modelKey, providers);
-    return info ? { label: info.label, source: info.provider } : undefined;
+    return info
+      ? {
+          label: info.label,
+          source: info.provider,
+          modelId: info.modelId,
+          baseUrl: info.baseUrl,
+          providerId: info.providerId,
+        }
+      : undefined;
   }, [modelKey, providers]);
   const officialSpecNow = officialSpecForModelKey(modelKey);
   const officialWindow = officialSpecNow
@@ -2232,7 +2287,7 @@ ${built.summary}`,
     if (desktop?.deleteWork) {
       const result = await desktop.deleteWork(work).catch(() => null);
       removed = Boolean(result?.ok);
-      if (result && !result.ok) showToast(`${result.error}，已从列表隐藏`);
+      if (result && !result.ok) showToast(t("{error}，已从列表隐藏", { error: result.error }));
     }
     // 文件删掉了就不用留记录；删不掉（正在跑 / 权限）就记一条隐藏，别让它又冒出来。
     if (removed) {
@@ -2268,8 +2323,10 @@ ${built.summary}`,
     if (!work) return;
     const label = workOverrides[id]?.title || work.title;
     const ok = await confirm({
-      title: `删除「${label}」？`,
-      detail: `这条会话在 ${work.agentName} 自己的历史记录里也会一并删掉，无法恢复。`,
+      title: t("删除「{name}」？", { name: label }),
+      detail: t("这条会话在 {agent} 自己的历史记录里也会一并删掉，无法恢复。", {
+        agent: work.agentName,
+      }),
       confirmText: "删除",
       danger: true,
     });
@@ -2281,9 +2338,17 @@ ${built.summary}`,
     }
   }
 
+  /*
+   * 和 selectConversation 同一个毛病：loadMessages 是 IPC，要读一整个 CLI 会话文件，
+   * 长会话要好一会儿。这段时间里用户点了别的工作的话，旧那条回来就会把 A 的历史
+   * 画到 B 上面（顶栏和侧栏已经是 B 了），接着发消息就全乱了。
+   */
+  const selectedWorkRef = useRef<string | null>(null);
+
   async function selectWork(id: string) {
     if (activeWorkId) agentMessageCache.current[activeWorkId] = agentMessages;
     const work = visibleWorks.find((item) => item.id === id);
+    selectedWorkRef.current = id;
     setActiveWorkId(id);
     setMobileOpen(false);
     if (work) {
@@ -2307,11 +2372,13 @@ ${built.summary}`,
     }
     try {
       const loaded = await desktop.loadMessages(work);
+      if (selectedWorkRef.current !== id) return;
       setAgentMessages(mergeAgentSwitches(loaded, switches));
       // CLI 自报的窗口占用，进度条和「该不该压」都靠它。
       const reported = await desktop.workContext?.(work).catch(() => null);
       if (reported) setCliContext((current) => ({ ...current, [work.id]: reported }));
     } catch {
+      if (selectedWorkRef.current !== id) return;
       setAgentMessages(mergeAgentSwitches([], switches));
     }
   }
@@ -2532,7 +2599,7 @@ ${built.summary}`,
     const userMessage: AgentMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: text || "（附件）",
+      content: text || t("（附件）"),
       createdAt: Date.now(),
     };
     const assistantMessage: AgentMessage = {
@@ -2630,12 +2697,12 @@ ${built.summary}`,
         setAgentMessages((current) =>
           current.map((item) =>
             item.id === assistantMessage.id
-              ? { ...item, trace: upsertToolTrace(item.trace, "压缩上下文", detail) }
+              ? { ...item, trace: upsertToolTrace(item.trace, t("压缩上下文"), detail) }
               : item,
           ),
         );
       };
-      if (agentMustCompact) showCompact("上下文到量了，正在整理前文…");
+      if (agentMustCompact) showCompact(t("上下文到量了，正在整理前文…"));
       try {
         const response = await fetch("/api/context", {
           method: "POST",
@@ -2671,10 +2738,10 @@ ${built.summary}`,
               message?: string;
             };
             if (row.type === "progress") {
-              if (row.phase === "整理") showCompact("正在整理前文…");
+              if (row.phase === "整理") showCompact(t("正在整理前文…"));
               if (row.phase === "摘要") {
                 summaryChars = row.chars || summaryChars;
-                showCompact(`正在生成摘要… 已写 ${summaryChars} 字`);
+                showCompact(t("正在生成摘要… 已写 {n} 字", { n: summaryChars }));
               }
               return;
             }
@@ -2688,7 +2755,7 @@ ${built.summary}`,
           };
         }
         if (built?.compaction) {
-          compactedNotice = compactNotice(built.compaction, agentLimit.tokens);
+          compactedNotice = t(COMPACT_NOTICE, compactNoticeVars(built.compaction, agentLimit.tokens));
           const saved = built.compaction;
           setWorkOverrides((current) => ({
             ...current,
@@ -2716,8 +2783,8 @@ ${built.summary}`,
         showCompact(
           compactedNotice ||
             (agentHistory.length
-              ? `已把之前的进展交给模型（${agentHistory.length} 条）`
-              : "没能带上之前的进展，新模型可能不记得前面做过什么"),
+              ? t("已把之前的进展交给模型（{n} 条）", { n: agentHistory.length })
+              : t("没能带上之前的进展，新模型可能不记得前面做过什么")),
         );
       }
     }
@@ -2787,8 +2854,10 @@ ${built.summary}`,
                   ...item,
                   trace: upsertToolTrace(
                     item.trace,
-                    "压缩上下文",
-                    `上下文到量了，正在用 ${sendAgentProfile.name} 的压缩指令…`,
+                    t("压缩上下文"),
+                    t("上下文到量了，正在用 {name} 的压缩指令…", {
+                      name: sendAgentProfile.name,
+                    }),
                   ),
                 }
               : item,
@@ -2810,12 +2879,18 @@ ${built.summary}`,
           },
         };
       });
+      // 压缩这一轮没起来（多半是终端宿主掉了）时别让整轮卡死：走 !ok 那条路，
+      // 把用户的问题照常发过去。不接住的话异常直接跳出 sendAgent，
+      // agentStreaming 和 markRunning(true) 都收不回来。
       const compacted = await firePrompt(nativeCompactPrompt(sendAgentProfile.kind), {
         history: undefined,
         images: [],
         resumeId: continueId,
         newSessionId: undefined,
-      });
+      }).catch((error: unknown) => ({
+        ok: false as const,
+        error: error instanceof Error ? error.message : "压缩失败",
+      }));
       if (!compacted.ok) {
         compactWaiter.current?.resolve(false);
         compactWaiter.current = null;
@@ -2829,10 +2904,12 @@ ${built.summary}`,
                     ...item,
                     trace: upsertToolTrace(
                       item.trace,
-                      "压缩上下文",
+                      t("压缩上下文"),
                       ok
-                        ? `${sendAgentProfile.name} 已压缩当前会话，接着处理你的问题`
-                        : "压缩没跑完，仍把你的问题发过去",
+                        ? t("{name} 已压缩当前会话，接着处理你的问题", {
+                            name: sendAgentProfile.name,
+                          })
+                        : t("压缩没跑完，仍把你的问题发过去"),
                     ),
                   }
                 : item,
@@ -2841,7 +2918,16 @@ ${built.summary}`,
         }
       }
     }
-    const result = await firePrompt(promptText);
+    /*
+     * firePrompt 是 IPC，会 reject。以前没有兜底：宿主一掉线就跳出 sendAgent，
+     * agentStreaming 和 markRunning(true) 都收不回来 —— 界面永久「进行中」，
+     * 而 sendAgent 开头那句 `|| agentStreaming` 会让这条工作再也发不出消息。
+     * 出错照旧写进这一轮的 trace（约定 22：不用弹窗）。
+     */
+    const result = await firePrompt(promptText).catch((error: unknown) => ({
+      ok: false as const,
+      error: error instanceof Error ? error.message : "发送失败",
+    }));
     if (!result.ok) {
       markRunning(sendWork.id, false);
       if (!remote?.silent) setAgentMessages((current) =>
@@ -3333,7 +3419,7 @@ ${summary}`;
             role: "assistant",
             content: "",
             createdAt: at,
-            trace: [{ type: "tool", name: "操控电脑", detail: "正在绑定目标窗口…" }],
+            trace: [{ type: "tool", name: t("操控电脑"), detail: t("正在绑定目标窗口…") }],
           },
         ]);
       }
@@ -3380,7 +3466,7 @@ ${summary}`;
                     ...(content === undefined ? {} : { content }),
                     trace: appendToolTrace(
                       item.trace,
-                      kind === "error" ? "出错" : "操控电脑",
+                      kind === "error" ? t("出错") : t("操控电脑"),
                       text,
                     ),
                   }
@@ -3487,11 +3573,13 @@ ${summary}`;
               recordComputerStep(
                 reply,
                 "error",
-                said ? `电脑控制已停止：模型没有给出可执行动作（${said}）` : "电脑控制已停止：模型没有回复",
+                said
+                  ? t("电脑控制已停止：模型没有给出可执行动作（{said}）", { said })
+                  : t("电脑控制已停止：模型没有回复"),
                 stripActions(replyText),
               );
             } else {
-              showToast("模型没有任何回复，已停下");
+              showToast(t("模型没有任何回复，已停下"));
             }
             break;
           }
@@ -3586,7 +3674,7 @@ ${summary}`;
       }
     },
     // send / prefs / modelKey 一律走 ref，这里只留真正稳定的东西。
-    [captureForModel, showToast],
+    [captureForModel, showToast, t],
   );
 
   return (
@@ -3662,7 +3750,7 @@ ${summary}`;
           onDeleteStudio={async (id) => {
             const item = studioConversations.find((entry) => entry.id === id);
             const ok = await confirm({
-              title: `删除「${item?.title || "这条创作"}」？`,
+              title: t("删除「{name}」？", { name: item?.title || t("这条创作") }),
               detail: "生成的图片和视频也会一起删掉，无法恢复。",
               confirmText: "删除",
               danger: true,
@@ -3840,7 +3928,21 @@ ${summary}`;
           />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6">
-            <Logo className="mb-4 size-12" />
+            {/* 空状态画的是**当前选中的模型**的图标：盯着一个空白输入框时，
+                最先想知道的就是「我现在在跟谁说话」。没有选中模型才退回 AllAi 自己的标志。 */}
+            {chatModelSource ? (
+              <div className="mb-4 grid size-12 place-items-center">
+                <ModelIcon
+                  modelId={chatModelSource.modelId}
+                  baseUrl={chatModelSource.baseUrl}
+                  providerId={chatModelSource.providerId}
+                  icons={prefs.brandIcons ?? {}}
+                  className="size-10"
+                />
+              </div>
+            ) : (
+              <Logo className="mb-4 size-12" />
+            )}
             <h1 className="text-2xl font-semibold tracking-tight">{t(greeting())}</h1>
             {chatModelSource ? (
               <p className="mt-2 text-sm text-muted">{t("{name} 愿意为您提供帮助", { name: chatModelSource.label })}</p>
@@ -3998,7 +4100,7 @@ ${summary}`;
                 await refreshOfficialStatus();
                 showToast(
                   status?.loggedIn
-                    ? `${agent.name} 已登录`
+                    ? t("{name} 已登录", { name: agent.name })
                     : result.ok
                       ? "没有检测到登录，请再试一次"
                       : result.error,

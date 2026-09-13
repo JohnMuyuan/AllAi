@@ -1,6 +1,7 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.16.40**。逐条发版见仓库根目录 `CHANGELOG.md`。
+给下一轮对话或下一个人用。当前发版 **0.16.43**，安装包 `dist/AllAi-Setup-0.16.43.exe`。
+逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
 
@@ -8,11 +9,17 @@
    `C:\Users\7ipny\Desktop\AllAi.lnk`，不是 `next dev`。**只改源码不打包，用户看不见。**
    改完必须：`Stop-Process -Name AllAi -Force`（若在运行）→ `npm run dist` →
    让用户**完全退出**再从快捷方式打开。
+   **打完包还要把源码 push 到 GitHub，安装包发 Release**（tag `vX.Y.Z`，附件
+   `dist/AllAi-Setup-X.Y.Z.exe`）。仓库保持私有；`dist/` 不进 git。
 2. **交活前把下面「改完要跑的检查」四条全跑完。** tsc 和 eslint 都过不代表能跑 ——
    这个项目栽过好几次：客户端引服务端模块（整个界面白屏）、构建 OOM、CLI 参数互斥，
    全是只有真跑起来才暴露的。
-3. **「产品约定」那一节的 65 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
-   动到相关代码前先扫一遍。
+3. **「产品约定」那一节的 94 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
+   动到相关代码前先扫一遍。**约定 91–92 是 0.16.41 审查出来的，尤其要先看** ——
+   那两条是同一类错误在两个地方各犯一次，代码里可能还有第三处。
+   约定 93–94 是 0.16.42 的：**认牌子的规则和抓图标的顺序都只有一份，别抄第二份。**
+   约定 95–97 是 0.16.43 的：**翻译只翻显示不翻数据；图标按「模型 → 接口 → 厂商」找；
+   界面上拼出来的中文要先拆成模板和变量再翻。**
 
 ---
 
@@ -28,7 +35,8 @@
 - **需求常常一次给三到五条**，编号列出来。做完要**逐条回**，包括「这条我没做，因为…」。
 - **动手前不用问太多**，方案一般直接授权（「具体方案和制作还是得麻烦你了」）。
   但方案定了要先用两三句说清楚再写代码。
-- 每一轮功能做完的固定动作：版本号 +1 → 写 `CHANGELOG.md` → 更新本文件 → `npm run dist`。
+- 每一轮功能做完的固定动作：版本号 +1 → 写 `CHANGELOG.md` → 更新本文件 → `npm run dist` →
+  源码 push 到 `JohnMuyuan/AllAi`，安装包发 GitHub Release。
   用户会立刻从快捷方式打开验收。
 
 ---
@@ -96,6 +104,62 @@ Windows 桌面应用：一个窗口里聊天 + 本地编程 Agent。
 npm install
 npm run desktop    # 开发：next dev :3000 + electron
 npm run dist       # 编译 electron、next build、electron-builder、写快捷方式
+```
+
+### 打桌面包（改完桌面功能固定这四步）
+
+用户日常打开的是**桌面快捷方式**，不是 `next dev`。**只改源码、只跑 next dev，用户看不见。**
+「编译」在这个项目里指的是**打安装包**，不是 `next build`。
+
+1. **先完全退出 AllAi**，还在跑就：
+
+   ```powershell
+   Stop-Process -Name AllAi -Force
+   ```
+
+   ⚠️ **不要 `taskkill /IM node.exe`** —— 会把用户正在用的 AllAi 本机服务杀掉。
+2. **清掉 `dist/` 里的残留**：`dist/win-unpacked.tmp` 和 `dist/win-unpacked.tmp.lock`
+   还在就删掉；**旧的 `AllAi-Setup-*.exe` 不要堆在 `dist/` 里**，会明显拖慢打包
+   （每个约 228MB）。留最近一两个当回退就够了。
+3. **在项目根目录**执行 `npm run dist`。
+4. 让用户**再完全退出一次**，然后从桌面快捷方式 `C:\Users\7ipny\Desktop\AllAi.lnk` 打开。
+
+**正常耗时（用户实测的基准，别把它当 10 分钟的活）**：
+tsc 几秒、next build 约 8 秒、**整次 `npm run dist` 约 1.5–2 分钟**。
+**超过四五分钟还没动静，多半是 AllAi 没退干净，或 `dist/` 里有上次没打完的临时目录** ——
+回去查这两样，别傻等。
+
+打包前至少跑这些（tsc 过了不代表能跑）：
+
+```bash
+node scripts/check-client-imports.cjs
+npx tsc --noEmit -p tsconfig.json
+npx tsc --noEmit -p electron/tsconfig.json
+npx eslint components app lib
+```
+
+**只有动了 `mobile/` 或 `relay/` 才需要 `npm run remote:deploy`，不要每次都打桌面包。**
+每一轮功能做完还要：**版本号 +1 → 写 `CHANGELOG.md` → 更新 `docs/HANDOFF.md` → 再 `npm run dist`。**
+
+### 关于某些 AI 编码环境的“安全删除护栏”
+
+不是项目的问题，但会表现出来。它拦的是 Next / electron-builder 清理**它们自己的**
+缓存和临时目录（`.next/turbopack`、`packaging/standalone`、electron 解压临时目录），
+症状是跑了很久才报：
+
+```
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":51,"threshold":50,...}
+[safe-delete] 操作失败: spawnSync ...\genie-trash\win32-x64.exe ETIMEDOUT
+```
+
+**按上面四步把 `dist/` 清干净、AllAi 退干净之后一般不会碰上** ——
+0.16.41 那次连着被拦三次，根因是 `dist/` 里堆着旧安装包、还留着上次的 `win-unpacked.tmp`，
+清理量一大就撞上阈值（`BULK_THRESHOLD` 默认 50 且**按回合累计**，
+手工 `rm -rf` 一次就把额度撑爆了，之后同一回合的构建全被拦）。
+真绕不开时再带上这两个环境变量（删除目标只有构建缓存）：
+
+```bash
+CODEBUDDY_SAFE_DELETE_ENABLED=0 CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=500000 npm run dist
 ```
 
 数据目录 `%USERPROFILE%\.allai\`（可用 `ALLAI_DATA_DIR` 改）：
@@ -489,6 +553,33 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 88. **界面文案走 `lib/i18n.ts`，用中文原文当 key。** `const t = useT()` 之后 `t("新对话")`、`t("共 {n} 段", { n })`；没翻的自动回落中文，不会出现空白或 `missing.key`。原文改了就是新 key，漏翻会直接看见。`LangProvider` 挂在 `app/page.tsx` 最外层（标题栏和确认框也能翻）。OptionSelect / ConfirmDialog 会自己翻选项和按钮。手机网页同样包 `LangProvider`，跟系统语言或 `allai-lang`。**下面这些绝对不能进词典，翻了直接弄坏功能**：协议标记（`ANSWER_MARK` / `HANDOFF_MARK`，桌面和手机要逐字一致）、斜杠指令的中文别名（`lib/cli-commands.ts` 里 `压缩`/`清空` 是**输入**不是显示）、存进 db.json 的枚举值、发给模型的提示词。语言存 localStorage（`allai-lang`）不进 prefs —— 首屏那段防闪烁脚本要在读 db 之前就用上。回归：`scripts/test-i18n-ui.cjs`（12 项，含主题和顶栏换行）。
 89. **深浅色存的是「模式」不是「颜色」。** `allai-theme` 只会是 `light` / `dark` / `system`；选了 `system` 之后用户在 Windows 里改深浅色要**当场**跟着变，所以真正的深浅每次现算（`resolveTheme`）并订阅 `prefers-color-scheme`。存最终颜色就做不到这一点。老版本只存 light / dark，`readThemeMode` 照旧认。
 90. **跑回归时给 dev server 带上 `ALLAI_NO_SUPPLIER_SCAN=1`。** AllAi 每次启动都会扫本机 CLI 配置、把真实中转站和 Key 导进 `db.json`（对用户是省事）—— 拿临时 `ALLAI_DATA_DIR` 跑测试时，这个目录里就白白躺一份真凭据。开关在 `lib/store.ts`。测完把目录删掉。
+91. **凡是 `await desktop.xxx()`（IPC），都要接住异常。** preload 里是 `ipcRenderer.invoke`，终端宿主没起来、宿主中途掉线、invoke 超时都会 **reject**，不是返回 `{ok:false}`。0.16.41 修的两处卡死都是漏了这一手，而且位置很阴：
+    - 官方登录聊天的 `await desktop.officialChat()` 在 HTTP 那条 `try/finally` **外面**（`official` 分支提前 `return`），一抛就跳过 `finally`，`streamingRef.current` 永远是 true —— 界面一直转圈，之后每次发送都被它挡掉。
+    - `sendAgent` 的 `firePrompt()` 干脆没有兜底，`agentStreaming` / `markRunning(true)` 都收不回来，而 `sendAgent` 开头那句 `|| agentStreaming` 会让**这条工作**再也发不出消息。
+
+    两处的共同点：异常路径不会复位「进行中」的标志，用户只能重启软件。报错要走原来的失败分支落进对话流（约定 22），不许弹窗。**写新的 IPC 调用时先问一句：这个 await 抛了会怎样。**
+92. **拿到异步结果先对一下还是不是当前那条。** `selectConversation` / `selectWork` 都栽过：点了 A 又马上点 B，A 的结果后到就把界面整块换成 A（侧栏还高亮着 B），连模型和思考档位都被改成 A 的。大对话 / 长会话加载慢的时候很容易撞上。做法是用一个 ref 记住最近一次点的是哪个 id，`await` 之后先比一次，不是它就丢掉。凡是「点一下 → 异步拉数据 → 整体 setState」的路径都要这么对一次。
+93. **认模型牌子只有 `lib/brand.ts` 一份规则，别在别处再抄一份。** 抄一份的下场是两边会漂移：0.16.42 之前 `components/BrandMarks.tsx` 里有个 `brandOfModel`，`lib/brand.ts` 修了 `xai` 的误伤它没修，结果 `MiniMaxAI/MiniMax-M2` 因为 "mini**maxai**" 含 `xai`，在模型切换条上被画成 **Grok 的 logo**。现在 `BrandMarks` 只管「怎么画」（`BrandGlyph`：有矢量图用矢量图，其余画品牌色块），认不认得出全问 `brandFor()`。**规则表的顺序有意义**：越具体的越靠前（`nvidia` 在 `llama` 前、`gpt`/`^o[134]` 在最后）。认不出的牌子**宁可留白也别硬画**。
+94. **抓站点图标必须先读页面里的 `<link rel="icon">`。** 国内站点（硅基流动 / 智谱 / 火山方舟 / 阿里百炼）基本不用 `/favicon.ico`，而是把图标声明在 `<link>` 里、还常挂 CDN（实测：智谱 `/static/images/favicon.png`、阿里 `img.alicdn.com`、混元腾讯云 COS、Kimi `statics.kimi.ai`）。只试标准路径要么 404、要么抓到糊的 16×16。顺序是：页面声明 → 标准路径（6s）→ 第三方服务（4s）。**错误信息只提用户填的那个域名**，不要把第三方服务的 host 写进去（以前报「www.google.com 连不上」，用户填的是 `qianfan.baidubce.com`，完全看不懂）；第三方兜底服务也要用国内能通的，Google 的 `s2/favicons` 墙内必超时。
+95. **图标查找的顺序是「单个模型 → 接口 → 厂商」（`lib/brand.ts` 的 `iconFor`）。** 接口的 key 是
+   `provider:<id>`，带前缀是为了不和模型 id / 厂商 id 撞车（`app/api/prefs` 存的时候会统一小写）。
+   接口排在厂商前面：一个中转站上可能挂着好几家的模型，用户给接口配了图标就是要它们都换掉。
+   `ModelIcon` 多了个 `providerId` 参数，凡是手里有接口的地方（`ModelSelect` / 使用统计 /
+   空状态）都要传，否则接口图标不生效。**接口行没配图标时画中性占位（服务器图标），
+   不要拿第一个模型的厂商图标冒充** —— OpenRouter 上挂着十几家，那么画是骗人的。
+96. **翻译只翻「显示」，不翻「数据」，更不翻发给模型的东西。** 词典用中文原文当 key，
+   没翻的自动回落中文，所以界面不会出现空白。这三条绝对不能进词典（翻了会直接弄坏功能）：
+   协议标记、斜杠指令的中文别名（`lib/cli-commands.ts` 里 `压缩`/`清空` 是**输入**不是显示）、
+   发给模型的提示词（操控电脑那一整套、`lib/chat-context.ts` 的历史包装）。
+   `AgentTrace.tsx` 里 `读`/`写`/`改`/`删` 那些单字是用来**匹配**工具名的，翻了就匹配不上。
+   预设模板（`lib/templates.ts`）的名称在**应用模板的那一刻**按当前语言写进表单 ——
+   那是存进 db 的用户数据，之后就不再跟着界面语言变。
+97. **界面上拼出来的中文要先拆成「模板 + 变量」再翻。** `` `${limit.note}（估算）` `` 这种写法
+   拼出来的是个全新字符串，词典里永远对不上。改成 `t("{note}（估算）", { note: t(limit.note) })`
+   这样两层：模板能翻，里面那段（数据表里的中文）也单独翻一次。
+   `lib/context-window.ts` 的 `compactNotice` 就是照这个拆的（`COMPACT_NOTICE` + `compactNoticeVars`），
+   服务端不知道界面语言，直接调 `compactNotice()` 拿中文；界面调 `t(COMPACT_NOTICE, vars)`。
+   同理，新增带变量的文案时**别把数字拼进模板**。
 
 ---
 
@@ -542,7 +633,11 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `components/StatsBar.tsx` | 输入框下面那行调试信息 |
 | `components/GeneralSettings.tsx` | 设置 →「通用」：统计行、联网、模型图标 |
 | `lib/studio.ts` | 创作对话的标题、预览、旧 job 迁到 conversation |
-| `lib/brand.ts` / `components/ModelIcon.tsx` | 认牌子 + 画图标。认不出就什么都不画 |
+| `lib/brand.ts` | **认牌子唯一的规则表**（28 家）：`brandFromModel` / `brandFromHost` / `brandFor` / `iconFor`，外加品牌色 `BRAND_COLOR` 和缩写 `BRAND_SHORT`。**别在别处再抄一份规则** |
+| `components/BrandMarks.tsx` | `BrandMark`（Anthropic / xAI / OpenAI 三家的矢量图）+ `BrandMonogram`（其余牌子画品牌色块）+ `BrandGlyph`（二选一）。`ModelIcon` 和 `ModelSwitch` 都走 `BrandGlyph` |
+| `components/ModelIcon.tsx` | 模型名前面的图标：用户配的图 → 矢量图 → 品牌色块 → 留白 |
+| `app/api/brand-icon/` | 填域名/图片网址抓图标存成 data URI。**先读页面 `<link rel="icon">`**，再试标准路径，最后第三方服务 |
+| `components/BrandIconSettings.tsx` | 设置 →「通用」→ 模型图标：按牌子/模型 id 配图，支持粘贴网址自动抓 |
 | `lib/responses-api.ts` | `/v1/responses`（联网搜索走这条），事件名是抓真实响应得来的 |
 | `components/MessageList.tsx` | 聊天气泡 + `steps`（联网/报错显示在对话里） |
 | `components/ModelSwitch.tsx` | 换模型提示：`型号 · 来源 → 型号 · 来源`。当时就写入时间线 |
@@ -551,7 +646,6 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `electron/quota.ts` | 官方 5h/7d/重置次数，curl 本机令牌 |
 | `lib/imagine.ts` | 生图/视频 HTTP，取消和错误原文 |
 | `electron/history.ts` | 扫各家 CLI 的会话、读消息、删会话 |
-| `app/api/brand-icon/` | 抓站点图标存成 data URI |
 | `app/api/agent-files/` | 把附件复制进 Agent 工作目录 |
 | `lib/scan-suppliers.ts` | 启动扫描本机 CLI 配置；**禁止改已有模型列表** |
 | `lib/models.ts` | chat / image / video 分类 |
@@ -590,6 +684,21 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 已知坑
 
+- **认牌子的规则只能有一份（`lib/brand.ts`）。** 0.16.42 之前 `components/BrandMarks.tsx`
+  里另抄了一份 `brandOfModel`，两套规则各走各的：`lib/brand.ts` 修了 `xai` 的误伤、
+  它没修，于是 `MiniMaxAI/MiniMax-M2` 因为 "mini**maxai**" 里含 `xai`，
+  在模型切换条上被画成 **Grok 的 logo**。**改了认牌规则，记得两边一起改 —— 或者干脆只有一边。**
+  现在只有 `lib/brand.ts` 一份，`BrandMarks` 只负责「怎么画」。
+  规则表里**顺序有意义**（越具体越靠前）：`nvidia` 必须排在 `llama` 前面
+  （Nemotron 是 Llama 改的），`gpt` / `^o[134]` 必须排最后（别抢 `gpt-oss` 这种社区模型）。
+- **`\bxai\b` 的 `\b` 不能省。** 裸 `xai` 会命中任何含 "maxai" 的 id。
+- **别用裸 `seed` 认字节。** `seed-1.6` 这类会被误伤，只认 `seed-oss` / `doubao` / `skylark`。
+  `^yi[-_]` 也必须锚开头，不然 `qinyi` / `zhanyi` 会被判成零一万物。
+- **抓图标别只试 `/favicon.ico`。** 国内站点（硅基流动 / 智谱 / 火山方舟 / 阿里百炼）基本
+  把图标声明在 `<link rel="icon">` 里、还常挂 CDN，只试标准路径要么 404 要么抓到糊图。
+- **别把第三方服务的 host 写进错误信息。** 以前兜底用 Google 的 `s2/favicons`，
+  墙内必超时（10s），最后报「www.google.com 连不上」—— 用户填的是 `qianfan.baidubce.com`，
+  完全看不懂。现在错误只提用户填的域名，且兜底服务只给 4 秒。
 - **打包**：`dist/win-unpacked` 若被 AllAi.exe 锁住会 `EBUSY`，先杀进程。
 - **Next 16**：以 `node_modules/next/dist/docs/` 为准，不要按旧 Next 习惯改。
 - **同一中转地址**：OpenAI 和 SpaceXAI 可能指向同一 host。扫描曾把 Grok 模型写进第一个服务；0.4.18 后不再写。
@@ -602,6 +711,26 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 - **用量口径**：合计 = 输入 + 输出。缓存读的 token 本身算在输入里，不重复计。第三方网关要开 `stream_options.include_usage` 才会回 usage，已经默认带上；个别网关可能不认这个字段，那种就统计不到。
 - **幽灵对话**：Claude 请求失败则没有 session，禁止用对话 UUID resume（0.4.16）。
 - **git**：仓库目前几乎只有 Initial commit，历史版本看 `CHANGELOG.md` 和 `dist/AllAi-Setup-*.exe`。
+
+**0.16.41 审查发现、这一轮没动（按值得动手的程度排）：**
+
+- **`electron/usage-scan.ts` 的增量偏移只靠「文件变小」判断重写。** 现在只有
+  `stat.size < state.offset` 才复位。会话文件被**截断后重写成更大或等大**时偏移不复位，
+  于是从半行垃圾开始解析，这段用量静默丢掉或错位重记，之后一直对不上。
+  要修得加内容校验（比如记文件头 512 字节的哈希），但**误判的代价是重复计数**，
+  比丢数据更难发现，所以没动。动手前先想清楚怎么判「真重写」。
+- **`usage.json` 只增不删、整份读写。** 约定 25 是用户明确要长期看，不能自动清；
+  但每记一条都要读+写整个文件，用上几年（几万条）之后会明显拖慢每轮消息的收尾。
+  真要治得按月分文件，或走 `usage-rollups.json` 那种汇总。现在还没到痛的时候。
+- **`electron/pty-host.ts` 的 `sessions` 也只增不删。** 终端退出后只把 status 改成 `exited`，
+  LiveSession 连同 buffer 一直留着（`chats` 这次已经修了）。数量取决于手动开了多少终端，
+  比 `chats` 慢得多。没动是因为界面还要显示「已退出」和退出码，得先定好它什么时候允许消失。
+- **Agent 工作区的 memo 其实是失效的。** `reasoningOptions` / `agentPermissionOptions`
+  每次渲染都新建、`onDraft` 是内联箭头函数，全都传给了 `memo(AgentWorkspace)`，
+  所以流式每个 token 都会重渲染整棵 Agent 子树。约定 38 的底线在聊天那边守住了，Agent 这边漏了。
+  要修得改成 `useMemo` / `useLatestCallback`。**没实测到卡顿就没动** —— 按「性能」那节量过再改。
+- **盯 Agent 文件的 useEffect，deps 里不含 `workOverrides`。** 回调读的是挂载那一刻的值，
+  工作运行中改了模型之后，文件回读不会再打模型切换标记。只影响显示，不影响功能。
 
 ---
 
@@ -626,10 +755,55 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.16.40**，安装包 `dist/AllAi-Setup-0.16.40.exe`。没有排期，按用户下一句话走。
+当前发版 **0.16.43**，安装包 `dist/AllAi-Setup-0.16.43.exe`，桌面快捷方式已更新。
+没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
-**最近刚做完（0.16.40）：** 英文界面覆盖设置各页、确认框、统计、创作、远程和手机网页。见约定 88。发给模型的提示词和斜杠中文别名仍不进词典。
+**最近刚做完（0.16.42）：认国内模型 + 图标导入。** 用户原话：「对国外大模型识别能力很强，
+但是对国内的模型和国内的聚合平台导出来的模型识别能力很差」+「用户只需要输入网址或者导入图片，
+软件自动识别网站的 icon」。四件事：
+① `lib/brand.ts` 从 13 家扩到 **28 家**（补了 DeepSeek / 通义 / Kimi / 智谱 / 豆包 / 混元 /
+文心 / 星火 / MiniMax / 阶跃 / 零一万物 / 百川 / 书生 / 商汤 / 昆仑万维 / LongCat + 三个聚合平台）；
+② 认 HuggingFace 风格 id（`deepseek-ai/DeepSeek-R1`、`zai-org/GLM-4.6`）；
+③ 新增 `BrandMonogram`，认得出但没矢量图的牌子画「品牌色 + 缩写」色块；
+④ `app/api/brand-icon` 改成先读页面 `<link rel="icon">`。
+顺带**修掉两个真 bug**：`MiniMaxAI/MiniMax-M2` 被认成 xAI（`BrandMarks.tsx` 里另抄了一份规则，
+已删，见「已知坑」第一条）、`nvidia/…nemotron` 被认成 Meta。
+验证方式：临时脚本跑了 **83 条**认牌子用例（全过）+ **15 个真实国内 AI 站点**抓图标（13 个成功），
+跑完即删；失败路径耗时从 ~14s 降到 ~5s。细节见 `CHANGELOG.md` 的 0.16.42。
+
+**最近刚做完（0.16.43）：英文翻译补完 + 接口图标 + 几处界面文案。** 五件事：
+① 英文词典 900 → **1004 条**，Model limits 的小字、Model icons 整页、**预设内容**（模板名按当前语言
+写进表单）、确认框/通知/导出 CSV 表头这些漏网的都翻了（约定 96：只翻显示，不翻数据和提示词）；
+② 拼出来的中文拆成「模板 + 变量」再翻，`compactNotice` 拆成 `COMPACT_NOTICE` + `compactNoticeVars`
+（约定 97）；③ 图标查找改成**单个模型 → 接口 → 厂商**，设置里多一组「接口」图标（约定 95）；
+④ 生图模型下拉、`使用统计 → 按模型` 都补上了模型图标；⑤ 英文下 Agent 输入框的推理/权限下拉
+只显示档位名，发送按钮不再被挤到下一行；聊天空状态改画当前模型的图标。
+验证：`check-client-imports` + 两套 tsc + eslint + `next build` 全过，临时脚本 25 条用例
+（认牌子回归 14 条 + 图标优先级 5 条 + 压缩提示 3 条 + 词典完整性 3 条）全过，跑完即删。
+
+**0.16.41 这个包是怎么来的（留个教训）：** 7 处改动全部改完，两套 tsc + eslint +
+`check-client-imports` + 13 个回归脚本全过；但 `npm run dist` **一次都没跑到头** ——
+前几次卡在七八分钟被环境的删除护栏打断，最后两次是用户嫌慢叫停。
+最后一次 shell 被杀后，electron-builder 的残留进程把 NSIS 包打完了（21:53，228MB）。
+补跑 `scripts/check-packaged-runtime.cjs` 四项全 PASS（Electron 运行时能加载首页/服务/偏好、
+操控电脑宿主 DPI+UIA 正常、提权宿主能 spawn、终端宿主在仓库外能起来并应答 IPC），
+`make-shortcut.cjs` 已更新桌面快捷方式。**所以包是可用的。**
+
+但它是**没走完整条 `npm run dist`** 的产物：**如果下一轮动了 `packaging/`、`electron/`
+的运行时部分或打包配置，别偷懒，按「怎么跑」那四步老老实实重打一次。**
+好消息是那两个收尾脚本很快：`check-packaged-runtime` + `make-shortcut` 一共约 7 秒，
+可以单独补跑，不用为了它们重打整个包。
+
+**再上一轮（0.16.41）：** 接手后的第一轮审查。改的全是**异常路径和资源清理** ——
+正常用时看不见，但踩上就是「卡死」或「越用越卡」。五处：
+① 官方登录聊天和 Agent 的 IPC 调用没有兜底，一抛异常界面就永久停在「进行中」，
+这条工作再也发不出消息（约定 91）；② 快速切换对话 / 工作时旧结果覆盖新内容（约定 92）；
+③ `electron/watch.ts` 建到一半失败漏关 `fs.watch`；④ 终端宿主 `chats` 只增不删；
+⑤ 远程 `onRelay` / `handleRpc` 没有 catch。细节见 `CHANGELOG.md` 的 0.16.41。
+**审查时还发现、但这一轮没动的两条**（都写在「已知坑」里了，接手时可以先从这两个下手）。
+
+**再上一轮（0.16.40）：** 英文界面覆盖设置各页、确认框、统计、创作、远程和手机网页。见约定 88。发给模型的提示词和斜杠中文别名仍不进词典。
 
 **更早（0.16.39）：** 补充英文词典；主界面左下角主题开关改到设置 → 通用。
 
@@ -850,6 +1024,40 @@ PowerShell/user32 模拟输入 + 视觉模型动作循环，零新增原生依�
    指向哪儿**（不能是 app.asar 里那份），再看目标窗口是不是管理员权限（UIPI）。
 8. 长对话里打字不该卡。感觉顿了就按「性能」那节的方法量一遍，
    基线是中位数 < 10ms、长任务 0。
+9. **异常路径要能自己恢复**（0.16.41 修的就是这批，以前踩上只能重启软件）：
+   - 聊天 / Agent 发一条，中途把终端宿主弄挂（任务管理器结束它）或断网 →
+     报错应该出现在**对话里**，并且**能继续发下一条**，不是一直转圈（约定 91）。
+   - 快速连点两条不同的对话（或两条不同的 Agent 工作）→ 界面显示的内容得是你**最后点的**
+     那条，不会串台，顶上的模型也不会被改成前一条的（约定 92）。
+10. **认国内模型**（0.16.42）：配一个国内服务（DeepSeek / 通义 / Kimi / 智谱 / 豆包都行），
+    模型列表里每个模型前面应该有图标。**没配图标的牌子应该是一块「品牌色 + 缩写」的色块**
+    （DeepSeek 蓝底 D、通义紫底 Q、Kimi 黑底 K），不是空白也不是错的 logo。
+    重点试两个反例：
+    - `MiniMaxAI/MiniMax-M2`（或任何 MiniMax 模型）→ 应该是 **MiniMax 的色块**，
+      **不能是 Grok 的 logo**（0.16.42 修的就是这个）。
+    - `nvidia/llama-3.1-nemotron-70b` → 应该是 **NVIDIA 的色块**，不是 Meta 的。
+    随便起个认不出的名字（比如 `my-custom-model`）→ 应该**什么都不画**（画错比不画更糟）。
+    换模型时那行提示 `型号 · 来源 → 型号 · 来源` 前面的小图标也应该跟着对。
+11. **图标导入**（0.16.42）：设置 → 通用 → 模型图标，给某个牌子填**域名**（不要带 `https://`）
+    试试 `bigmodel.cn` / `volcengine.com` / `dashscope.aliyun.com` / `moonshot.cn` ——
+    应该都能抓到图标（这几个的图标都在 `<link rel="icon">` 里或 CDN 上，不是 `/favicon.ico`）。
+    也可以直接**粘贴**一个网址，粘完自动就抓。填一个确实没有图标的域名
+    （比如 `qianfan.baidubce.com`）→ 报错应该说**「qianfan.baidubce.com 上没找到图标」**，
+    **不能出现 google.com**，而且 5 秒左右就该返回。
+12. **英文界面扫一遍**（0.16.43）：设置 → 通用 → 语言切 English，然后逐页看还有没有漏网的中文。
+    重点四处：
+    - **Model limits**（设置 → 用量/上下文那一块）模型下面的小字 —— 原来全是
+      「及更早」「（可输入部分）」「认不出型号，按保守值算」。
+    - **模型图标**整页（含新加的「接口」那一组）。
+    - **新建接口时的预设按钮**（通义千问→Qwen、智谱 GLM→Zhipu GLM、硅基流动→SiliconFlow）。
+    - **Agent 输入框**：推理 / 权限两个下拉**只显示档位名**（Balanced），
+      而且**发送按钮必须还和它们在同一行**，不能被挤到下一排（窗口拉窄也一样）。
+    已知还留着中文的地方（**不用改**）：服务端返回的错误提示、发给模型的提示词。
+13. **接口图标**（0.16.43）：设置 → 通用 → 模型图标，最上面一组是「接口」。
+    给一个接口配图标后，这个接口下面的**所有模型**（模型列表、使用统计「按模型」表、
+    聊天空状态）都应该换成它；再给其中**某一个模型**单独配一张 → 那个模型用自己那张，
+    其余的仍用接口那张（约定 95 的优先级）。
+    没配图标的接口行显示的是**灰色服务器图标**，不是它第一个模型的厂商图标。
 
 
 

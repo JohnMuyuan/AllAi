@@ -1,10 +1,122 @@
 # 更新日志
 
-当前版本 **0.16.40**。安装包在 `dist/AllAi-Setup-<version>.exe`。用户日常从桌面快捷方式打开，改完 UI 必须 `npm run dist` 并完全退出后再开。
+当前版本 **0.16.43**。安装包在 `dist/AllAi-Setup-<version>.exe`。用户日常从桌面快捷方式打开，改完 UI 必须 `npm run dist` 并完全退出后再开。
 
 格式：最新在上。`0.4.7` 起按实际发版逐条记录；更早版本按已打出的安装包归纳。
 
 ---
+
+## 0.16.43
+
+英文翻译补完 + 图标能按「接口」配 + 几处之前漏掉的界面文案。
+
+- **英文词典从 900 条补到 1004 条。**
+  - **Model limits 的小字全翻了。** `lib/context-window.ts` 里那些说明（`Claude 4 及更早`、
+    `GPT-5 / Codex（可输入部分）`、`国产长文模型`、`认不出型号，按保守值算`、`你手动设定的`）
+    和 `lib/model-pricing.ts` 的（`Claude Opus 4.5 及之后`、`o 系列`…）之前一律显示中文。
+    顺手把 ChatApp 里 `「${limit.note}（估算）」` 这种**拼好再翻**的写法改成模板 + 变量
+    （`t("{note}（估算）", { note: t(limit.note) })`）—— 拼接出来的字符串是全新 key，词典永远对不上。
+  - **Model icons 里的中文全翻了。** 厂商名（通义千问 / 智谱 GLM / 硅基流动 / 商汤日日新…）、
+    那一大段说明文字，还有新增的「接口」「接口默认」两组标题。
+  - **预设内容也翻了。** 模板名（通义千问→Qwen、智谱 GLM→Zhipu GLM、硅基流动→SiliconFlow）、
+    官方登录的三个账号名和它们的提示语。模板应用时按**当前语言**把名称写进表单 ——
+    存进 db 之后就不再跟着界面语言变（用户手改的也一样）。
+  - 顺带补了一批零散文案：确认框（删除「X」？/ 移除「X」？）、通知（「X」做完了 / X 已登录）、
+    压缩提示（`compactNotice` 拆成模板 + 变量，界面和服务端两条路文案一致）、导出 CSV 的表头、
+    热力图的星期（一→Mo）、用量统计里的「自动识别」等等。
+  - **没翻的**：发给模型的提示词（操控电脑那一整套）、斜杠指令的中文输入（`压缩`/`清空` 是输入不是显示）、
+    `AgentTrace` 里用来**匹配**工具名的单字（`读`/`写`/`改`…）—— 翻了就匹配不上了。
+- **可以给「接口」（模型提供方）配图标了。** 模型图标设置里多了一组「接口」，上传图片或填网址
+  自动抓，配好之后这个接口下面的**所有模型**都换成它。
+  图标查找优先级改成 **单个模型 → 接口 → 厂商**（`lib/brand.ts` 的 `iconFor`）：
+  接口比厂商具体（一个中转站上挂着好几家），又比逐个模型配省事。
+  接口的 key 是 `provider:<id>`，带前缀是为了不和模型 id / 厂商 id 撞车。
+  接口行没配图标时显示一个中性占位（服务器图标），**不拿第一个模型的厂商图标冒充** ——
+  OpenRouter 上挂着十几家，那么画是骗人的。
+- **生图模型选择也有图标了。** `OptionSelect` 现在支持每个选项带图标，
+  「聊天生图模型 / Agent 生图模型」两个下拉里，每个模型和列表里看到的是同一套图标。
+- **使用统计「按模型」那张表加了模型图标。** 图标来自通用的「模型图标」（用户配的 + 认牌子），
+  按型号认不出时再用接口地址兜底。为此给 `UsageStats` 传了 `providers` 和 `prefs`。
+- **英文下 Agent 输入框不再把发送按钮挤到下一行。** 推理 / 权限两个下拉在英文下
+  **只显示选中的档位**（`Reasoning · Balanced` → `Balanced`），图标（大脑 / 盾牌）已经说明是哪一项，
+  完整名字仍留在 `aria-label` 里，读屏和自动化测试不受影响。
+  另外给那行提示加了 `truncate`、给发送/停止按钮加了 `shrink-0`，宁可提示自己截断也别挤掉按钮。
+- **聊天空状态显示当前模型的图标。** 以前永远是 AllAi 自己的标志，现在选中了模型就画那个模型的图标
+  （盯着空白输入框时最先想知道的就是「我在跟谁说话」），没选模型才退回 AllAi 标志。
+
+## 0.16.42
+
+认牌子和配图标这两件事，重点补国内模型。
+
+- **认得出国内模型了。** 原来 `lib/brand.ts` 只认 13 家（Claude / Grok / GPT / Gemini 这些
+  国外为主），DeepSeek、通义、Kimi、智谱、豆包、混元、文心、星火这些**一个都不认**，
+  模型名前面永远是空的，看着就像「没认出来」。现在扩到 28 家：
+  国外加了 Google / Meta / Mistral / Cohere / NVIDIA / Microsoft，国内补了
+  DeepSeek、通义千问、Kimi、智谱 GLM、豆包、腾讯混元、文心一言、讯飞星火、MiniMax、
+  阶跃星辰、零一万物、百川、书生·浦语、商汤日日新、昆仑万维、美团 LongCat，
+  外加 OpenRouter / 硅基流动 / Groq 三个聚合平台。
+- **认得出聚合平台导出的 HuggingFace 风格 id。** 硅基流动 / 魔搭 / 火山方舟 / 阿里百炼
+  导出来的不是干净的产品名，而是 `Qwen/Qwen3-235B-A22B`、`deepseek-ai/DeepSeek-R1`、
+  `moonshotai/Kimi-K2-Instruct`、`zai-org/GLM-4.6`、`01-ai/Yi-1.5-34B-Chat` 这种
+  `厂商/模型` 写法。规则改成按**厂商关键词**匹配，这类 id 现在都认得出。
+- **认出来但没矢量图的牌子，画一个「品牌色 + 缩写」的色块。**
+  以前只有 Anthropic / xAI / OpenAI 三家有矢量图，国内模型认出来了也什么都不画。
+  现在新增 `BrandMonogram`：DeepSeek 是蓝底 D、通义是紫底 Q、Kimi 是黑底 K……一眼能分清是哪家。
+  **认不出来的仍然留白** —— 画错牌子比不画更糟。
+- **修 `MiniMaxAI/MiniMax-M2` 被认成 xAI。** 裸 `xai` 子串会命中「mini**maxai**」，
+  而 `components/BrandMarks.tsx` 里**另抄了一份**认牌规则（`brandOfModel`），
+  `lib/brand.ts` 修了它没修 —— 结果模型切换条上给 MiniMax 画了 **Grok 的 logo**。
+  现在那份抄的规则删掉了，认牌子**只有 `lib/brand.ts` 一份**，`ModelSwitch` 直接用它，
+  色块那一档也跟着生效（以前切换条里国内模型是光秃秃一个名字）。
+- **修 `nvidia/llama-3.1-nemotron-70b` 被认成 Meta。** NVIDIA 的 Nemotron 是拿 Llama 改的，
+  两个关键词都在，`llama` 规则排在前面就抢走了。现在 `nvidia` 规则排在 `llama` 前面。
+- **修商汤 `SenseChat` / `SenseNova` 认不出。** 原来只有 `sense-\d`，认不到 `sensechat-5`。
+- **图标导入：现在会读页面里的 `<link rel="icon">` 了。** 这是国内站点的关键 ——
+  硅基流动、智谱、火山方舟、阿里百炼这些基本**不用** `/favicon.ico`，而是声明在
+  `<link>` 里（还常常挂在 CDN 上）。只试标准路径要么 404、要么抓到一张糊的 16×16。
+  实测 15 个国内 AI 站点：**13 个能抓到**，其中智谱走 `/static/images/favicon.png`、
+  火山方舟走 `portal.volccdn.com`、阿里走 `img.alicdn.com`、混元走腾讯云 COS、
+  Kimi 走 `statics.kimi.ai`、零一万物走 `apple-touch-icon.png` —— 这些以前全是抓不到的。
+  支持 `icon` / `shortcut icon` / `apple-touch-icon` / `apple-touch-icon-precomposed` / `mask-icon`。
+- **修「填了域名却报 google.com 连不上」。** 原来最后一个兜底候选是 Google 的
+  `s2/favicons`，墙内**必然**超时（实测 10s），白等一轮还把错误信息写成了
+  「www.google.com 连不上（超时）」—— 用户填的是 `qianfan.baidubce.com`，
+  看到这句完全不知道发生了什么。现在分成两轮：先试用户自己的站（页面声明的图标 +
+  标准路径，6s），再试第三方服务（4s），错误信息只提**用户填的那个域名**，例如
+  「qianfan.baidubce.com 上没找到图标（返回 404）。可以直接填图片网址，或从本地选一张。」
+  兜底服务换成国内能通的 `favicon.cccyun.cc`，Google 降到最后且只给 4 秒。
+  失败路径实测从 ~14s 降到 ~5s，成功路径 255–323ms。
+- **设置里填完域名可以直接粘贴。** 图标输入框支持 `onPaste` 自动去抓，不用再点一下按钮。
+  状态文案跟着改：认得出但没矢量图的显示「品牌色块」而不是「未识别」。
+
+## 0.16.41
+
+接手后的第一轮审查，改的全是**异常路径和清理**，正常用时看不见，但踩上就是「卡死」或「越来越卡」。
+
+- **修「发送之后界面再也发不出消息」。** 两条路的 IPC 调用都没有兜底：
+  官方登录聊天的 `await desktop.officialChat()` 在 HTTP 那条 `try/finally`
+  **外面**，一抛异常（终端宿主没起来、宿主中途掉线、invoke 超时）就直接跳出
+  整个发送函数，`finally` 里的 `streamingRef.current = false` 永远执行不到 ——
+  界面一直转圈，之后每次发送都被 `streamingRef` 挡掉。`sendAgent` 的
+  `firePrompt` 同样没有兜底，`agentStreaming` 和 `markRunning(true)` 都收不回来，
+  而它开头那句 `|| agentStreaming` 会让**这条工作**再也发不出消息。
+  只能重启软件。现在异常接住并走原来的失败分支：官方登录写进气泡、
+  Agent 写进这一轮的 trace，**不弹窗**（约定 22）。
+- **修快速切换对话 / 工作时的错位。** `selectConversation` 和 `selectWork`
+  拿到结果后不校验还是不是当前这条。大对话 / 长会话加载慢，点了 A 又马上点 B 时，
+  A 的结果后到会把界面整块换成 A 的内容（侧栏还高亮着 B），
+  连模型和思考档位都被改成 A 的。现在用 ref 记住最近一次点的是哪条，不是它就丢掉。
+- **修 `electron/watch.ts` 建到一半失败时漏关 watcher。** 目录 watcher 建起来之后，
+  `filesToWatch()`（codex 那条要读目录）抛错时，catch 只返回 `{error}` 就结束了 ——
+  调用方拿不到 `close()`，那个 `fs.watch`、已建的文件 watcher 和防抖定时器全部永久泄漏。
+  正是约定 66 踩过的同一类坑。现在 catch 里收干净。
+- **修终端宿主的 `chats` 只增不删。** 每一轮 CLI 调用（Agent 发一条、官方登录聊一轮）
+  都往 Map 里留一个句柄（子进程引用 + 输出缓冲 + StringDecoder），只有显式 kill 才删，
+  正常跑完的一直挂着，一天下来几百份，全在长期不重启的宿主进程里。
+  现在一轮 `done` 就撤掉 —— done 说明进程已经 close，之后再收到 kill 是 no-op。
+- **修远程控制的 `onRelay` / `handleRpc` 没有 catch。** 两个都是 async，
+  里面的 await 一抛就是未处理 rejection：手机会停在某条工作的界面上却再也收不到新消息，
+  而这边的 ping 心跳还以为连接是好的。现在接住并写进 `~/.allai/desktop.log`。
 
 ## 0.16.40
 

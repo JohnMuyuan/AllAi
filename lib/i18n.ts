@@ -397,7 +397,6 @@ const EN: Record<string, string> = {
   /* 确认框 */
   "删除这条对话？": "Delete this chat?",
   "对话和里面的消息都会删掉，无法恢复。": "The chat and its messages will be deleted. This can't be undone.",
-  "删除「{name}」？": "Delete “{name}”?",
   "这条会话在 {agent} 自己的历史记录里也会一并删掉，无法恢复。":
     "This session will also be deleted from {agent}'s own history. This can't be undone.",
   "生成的图片和视频也会一起删掉，无法恢复。": "Generated images and videos will be deleted too. This can't be undone.",
@@ -1123,6 +1122,145 @@ const EN: Record<string, string> = {
   "；Claude Code / Codex 的会话文件里没有钱，按型号单价估算（第三方中转站的价和官方也不一样），只能看个量级，别当账单。":
     "; Claude Code / Codex session files have no dollars, so spend is estimated from list prices (gateways differ from official). Treat it as order-of-magnitude, not a bill.",
   "；本机 CLI 的用量和导入的历史按天汇总存在": "; local CLI usage and imported history are rolled up by day in",
+
+  /* ---------- 数据里的中文：模型上限 / 单价 / 厂商名 / 预设 / 推理档位 ----------
+   * 这些字符串长在 lib/ 的数据表和用户数据里，翻之前界面上一律是中文。
+   * 翻的是**显示**，不是数据本身 —— 表里存的还是中文，界面读的时候过一遍 t()。
+   */
+
+  /* 上下文上限（lib/context-window.ts） */
+  "Claude 5 系": "Claude 5 series",
+  "Claude 4 及更早": "Claude 4 and earlier",
+  "GPT-5 / Codex（可输入部分）": "GPT-5 / Codex (input side)",
+  "国产长文模型": "Chinese long-context models",
+  "开源模型": "Open-source models",
+  "你手动设定的": "Set by you",
+  "认不出型号，按保守值算": "Model not recognized — using a safe estimate",
+  "上下文已到 {pct}%（约 {before}/{limit}），已把更早的内容压成摘要，省下约 {saved} token。最近几轮保留原文。":
+    "Context hit {pct}% (about {before}/{limit}), so the earlier messages were folded into a summary, saving about {saved} tokens. The latest turns are kept verbatim.",
+
+  /* 型号单价（lib/model-pricing.ts） */
+  "Claude Opus 4.5 及之后": "Claude Opus 4.5 and later",
+  "Claude（按 Sonnet 估）": "Claude (priced as Sonnet)",
+  "GPT-5.5 及之后": "GPT-5.5 and later",
+  "o 系列": "o-series",
+
+  /* 厂商名（lib/brand.ts 的 BRAND_LABEL） */
+  "通义千问": "Qwen",
+  "智谱 GLM": "Zhipu GLM",
+  "豆包": "Doubao",
+  "腾讯混元": "Tencent Hunyuan",
+  "文心一言": "Ernie",
+  "讯飞星火": "iFlytek Spark",
+  "阶跃星辰": "StepFun",
+  "零一万物": "01.AI",
+  "百川智能": "Baichuan",
+  "书生·浦语": "InternLM",
+  "商汤日日新": "SenseNova",
+  "昆仑万维": "Skywork",
+  "美团 LongCat": "Meituan LongCat",
+  "硅基流动": "SiliconFlow",
+
+  /* 预设接口（lib/templates.ts / lib/official-chat.ts） */
+  "DashScope 兼容模式": "DashScope compatible mode",
+  "保存后可从接口同步模型": "Save it, then sync models from the endpoint",
+  "一个密钥聚合多家模型": "One key, models from many vendors",
+  "用本机 Claude Code 登录 Anthropic 账号，聊天走订阅额度":
+    "Uses the Anthropic account signed in on this machine; chat draws on your subscription",
+  "用本机 Grok 登录 xAI 账号，聊天走订阅额度":
+    "Uses the xAI account signed in on this machine; chat draws on your subscription",
+  "用本机 Codex 登录的 ChatGPT 账号，聊天走订阅额度，界面还是 AllAi 自己的":
+    "Uses the ChatGPT account signed in via Codex on this machine; chat draws on your subscription, the interface is still AllAi’s",
+  "登录后聊天里会出现 Sonnet 5 / Opus 5 等型号":
+    "After signing in, Sonnet 5 / Opus 5 and more appear in chat",
+  "登录后聊天里会出现 Grok 4.6 等型号": "After signing in, Grok 4.6 and more appear in chat",
+  "登录后聊天里会出现 GPT-5.6 / GPT-6 等型号":
+    "After signing in, GPT-5.6 / GPT-6 and more appear in chat",
+
+  /* 推理档位（lib/reasoning.ts）—— 大部分档位名上面已经翻过了，这里只补缺的 */
+  "自定义": "Custom",
+  "未识别": "Unrecognized",
+  "通用思考模型": "Generic reasoning model",
+  "Qwen 思考": "Qwen thinking",
+  "Claude 扩展思考": "Claude extended thinking",
+
+  /* 模型图标设置（components/BrandIconSettings.tsx） */
+  "品牌色块": "Brand tile",
+  "模型名前面的厂商图标。Anthropic / xAI / OpenAI 是自带的矢量图，其余认得出牌子的画品牌色块（DeepSeek、通义、Kimi、智谱这些都有）。想换成真图标：填网站域名会去它页面上找图标，填图片网址就直接用那张图，也可以从本地选一张。给「接口」配的图标会盖住它下面所有模型的厂商图标 —— 比逐个厂商配省事，又比按单个模型配省得重复。图标存在本机，不会每次渲染都去打别人的服务器。":
+    "The vendor icon in front of each model name. Anthropic / xAI / OpenAI ship as vector art; other recognized vendors get a color tile with their initials (DeepSeek, Qwen, Kimi, Zhipu and more). To use a real icon: type a site domain and we pull the icon off that page, paste an image URL to use it directly, or choose a file from disk. An icon set on an endpoint overrides the vendor icon for every model under it — coarser than per-vendor, less repetitive than per-model. Icons are stored locally — nothing is fetched from someone else’s server while rendering.",
+  "接口（配了这个，它下面的模型都跟着换）": "Endpoints (this overrides every model under it)",
+  "接口默认": "Endpoint default",
+
+  /* 统计热力图（components/UsageHeatmap.tsx） */
+  "年": "Year",
+  "季": "Quarter",
+  "月": "Month",
+  "一": "Mo",
+  "二": "Tu",
+  "三": "We",
+  "四": "Th",
+  "五": "Fr",
+  "六": "Sa",
+  "日": "Su",
+
+  /* 创作 / 聊天里零散的中文 */
+  "正在生成视频…": "Generating video…",
+  "正在生成图片…": "Generating image…",
+  "参考图.png": "reference.png",
+  "参考视频.mp4": "reference.mp4",
+  "自动识别": "Auto-detect",
+  "未命名视频": "Untitled video",
+  "未命名作品": "Untitled creation",
+  "自定义命令": "Custom command",
+  "（附件）": "(attachment)",
+  "AllAi 额度": "AllAi quota",
+  "近 5 小时已用到 {n}%": "Last 5 hours: {n}% used",
+  "近 7 天已用到 {n}%": "Last 7 days: {n}% used",
+  "正在绑定目标窗口…": "Binding the target window…",
+  "上下文到量了，正在整理前文…": "Context is full — summarizing the earlier messages…",
+  "正在整理前文…": "Summarizing the earlier messages…",
+  "正在生成摘要… 已写 {n} 字": "Writing the summary… {n} characters so far",
+  "上下文重置": "Context reset",
+  "{reason}，这一轮从头开始": "{reason} — this turn starts over",
+  "CLI 正在压缩… {detail}": "CLI is compacting… {detail}",
+  "上下文到量了，正在用 {name} 的压缩指令…": "Context is full — running {name}’s compact command…",
+  "{name} 已压缩当前会话，接着处理你的问题": "{name} compacted this session and is now on your question",
+  "压缩没跑完，仍把你的问题发过去": "Compaction didn’t finish — sending your question anyway",
+  "已切换到": "Switched to",
+  "使用": "Started with",
+  "开始对话": "for this chat",
+
+  /* 提示 / 确认框 / 通知里漏掉的零散文案 */
+  "{reason}，这一轮从头开始，之前的上下文没带上":
+    "{reason} — this turn starts over and the earlier context didn’t carry across",
+  "出错：{message}": "Error: {message}",
+  "{name}已登录": "Signed in to {name}",
+  "已退出{name}": "Signed out of {name}",
+  "（{n} 个附件）": "({n} attachments)",
+  "请先安装 {name}": "Install {name} first",
+  "请先在设置里登录{name}": "Sign in to {name} in Settings first",
+  "没能把之前的对话交给新模型，它可能不记得前面聊过什么":
+    "Couldn’t hand the earlier chat to the new model — it may not remember what you discussed",
+  "没能带上之前的进展，新模型可能不记得前面做过什么":
+    "Couldn’t carry the earlier progress over — the new model may not remember what was done",
+  "已把之前的进展交给模型（{n} 条）": "Handed the earlier progress to the model ({n} messages)",
+  "{error}，已从列表隐藏": "{error} — hidden from the list",
+  "删除「{name}」？": "Delete “{name}”?",
+  "移除「{name}」？": "Remove “{name}”?",
+  "这条创作": "this creation",
+  "这个接口": "this endpoint",
+  "电脑控制已停止：模型没有回复": "Computer control stopped: the model didn’t reply",
+  "电脑控制已停止：模型没有给出可执行动作（{said}）":
+    "Computer control stopped: no runnable action from the model ({said})",
+  "模型没有任何回复，已停下": "No reply from the model — stopped",
+  "接续 {n} · ": "Continued {n} · ",
+  "接口 {n}": "Endpoint {n}",
+  "全局接口 {n}": "Global endpoint {n}",
+  "缓存读": "Cache read",
+  "缓存写": "Cache write",
+  "花费USD": "Cost USD",
+  "专区": "Area",
+  "服务": "Service",
 };
 
 

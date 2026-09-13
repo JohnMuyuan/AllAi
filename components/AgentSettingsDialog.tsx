@@ -85,7 +85,7 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast }: Props
   function addEndpoint(mode: AgentAuthMode) {
     const draft: EndpointDraft = {
       id: crypto.randomUUID(),
-      label: mode === "official" ? "官方登录" : `接口 ${endpoints.length + 1}`,
+      label: mode === "official" ? t("官方登录") : t("接口 {n}", { n: endpoints.length + 1 }),
       mode,
       apiKey: "",
       baseUrl: "",

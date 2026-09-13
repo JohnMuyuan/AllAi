@@ -5,7 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { matchSlashCommands, type SlashCommandHint } from "@/lib/cli-commands";
 import type { AgentKind, ChatAttachment } from "@/lib/types";
 import { OptionSelect } from "./OptionSelect";
-import { useT } from "./I18n";
+import { useLang, useT } from "./I18n";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 
 type Props = {
@@ -113,6 +113,7 @@ export function Composer({
   agentKind,
 }: Props) {
   const t = useT();
+  const lang = useLang();
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -434,6 +435,9 @@ export function Composer({
               disabled={disabled}
               icon={<Brain className="size-3.5 shrink-0 text-accent" />}
               compact
+              /* 英文的「Reasoning ·」前缀比中文长得多，加上它同一行就塞不下发送按钮了。
+                 图标（大脑 / 盾牌）已经说明是哪一项，名字仍在 aria-label 里。 */
+              hideLabel={lang === "en"}
             />
           ) : null}
           {onPermission && permissionOptions.length > 0 ? (
@@ -445,31 +449,37 @@ export function Composer({
               disabled={disabled}
               icon={<Shield className="size-3.5 shrink-0 text-accent" />}
               compact
+              hideLabel={lang === "en"}
             />
           ) : null}
-          <span className="ml-auto hidden text-xs text-muted sm:inline">
-            {busy ? t("上传中…") : hideHint ? "" : agentKind ? t("Enter 发送 · / 看指令") : t("Enter 发送 · 可粘贴/拖入文件")}
-          </span>
-          {streaming ? (
-            <button
-              type="button"
-              onClick={onStop}
-              aria-label={t("停止生成")}
-              className="ml-2 grid size-9 place-items-center rounded-full bg-ink text-canvas"
-            >
-              <Square className="size-3.5 fill-current" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={fireSend}
-              disabled={!canSend}
-              aria-label={t("发送")}
-              className="ml-2 grid size-9 place-items-center rounded-full bg-ink text-canvas disabled:opacity-30"
-            >
-              <ArrowUp className="size-4" />
-            </button>
-          )}
+          {/* 提示和发送按钮绑成一组：地方不够时**整组一起**掉到下一排，
+              绝不能把按钮单独挤下去 —— 英文文案长，这是最容易撞见的一处。
+              组里的提示可以被压扁（truncate），按钮永远保持 36px。 */}
+          <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+            <span className="hidden min-w-0 truncate text-xs text-muted sm:inline">
+              {busy ? t("上传中…") : hideHint ? "" : agentKind ? t("Enter 发送 · / 看指令") : t("Enter 发送 · 可粘贴/拖入文件")}
+            </span>
+            {streaming ? (
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label={t("停止生成")}
+                className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-canvas"
+              >
+                <Square className="size-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={fireSend}
+                disabled={!canSend}
+                aria-label={t("发送")}
+                className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-canvas disabled:opacity-30"
+              >
+                <ArrowUp className="size-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
       </div>

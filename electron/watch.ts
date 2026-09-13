@@ -128,6 +128,26 @@ export function startWorkWatch(
       },
     };
   } catch (error) {
+    /*
+     * 建到一半失败了（filesToWatch 对 codex 要读目录、可能抛），已经建起来的
+     * 目录 watcher、文件 watcher 和防抖定时器必须在这里收掉。
+     * 返回 {error} 之后调用方拿不到 close()，这些东西就永久泄漏了 ——
+     * 每失败一次漏一份，正是这个项目踩过的那类坑（约定 66）。
+     */
+    if (timer) clearTimeout(timer);
+    try {
+      dirWatcher?.close();
+    } catch {
+      // 已经关了
+    }
+    for (const watcher of fileWatchers.values()) {
+      try {
+        watcher.close();
+      } catch {
+        // 已经关了
+      }
+    }
+    fileWatchers.clear();
     return { error: error instanceof Error ? error.message : "盯不住这个文件" };
   }
 }

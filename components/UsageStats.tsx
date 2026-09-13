@@ -11,8 +11,15 @@ import { OFFICIAL_CHATS } from "@/lib/official-chat";
 import { addTotals, emptyTotals, windowUsage, type UsageArea, type UsageEvent } from "@/lib/usage";
 import type { CcSwitchPreview, OfficialQuotaMap } from "@/types/desktop";
 import type { RollupSummary } from "@/lib/usage-rollups";
+import type { AppPrefs, PublicProvider } from "@/lib/types";
+import { ModelIcon } from "./ModelIcon";
 
-type Props = { onToast?: (text: string) => void };
+type Props = {
+  onToast?: (text: string) => void;
+  /** 用来给「按模型」那张表补上接口地址和模型图标。 */
+  providers?: PublicProvider[];
+  prefs?: AppPrefs;
+};
 
 const AREA_LABEL: Record<UsageArea, string> = { chat: "聊天", agent: "Agent", studio: "创作" };
 const AREA_COLOR: Record<UsageArea, string> = {
@@ -108,7 +115,7 @@ function LineChart({
   );
 }
 
-export function UsageStats({ onToast }: Props) {
+export function UsageStats({ onToast, providers = [], prefs }: Props) {
   const t = useT();
   const lang = useLang();
   const confirm = useConfirm();
@@ -194,20 +201,37 @@ export function UsageStats({ onToast }: Props) {
     return map;
   }, [filtered]);
 
+  /** 用量里的 source 存的是接口名（见 app/api/chat/route.ts），按名字换回接口，好取地址。 */
+  const providerByName = useMemo(() => {
+    const map = new Map<string, PublicProvider>();
+    for (const provider of providers) map.set(provider.name, provider);
+    return map;
+  }, [providers]);
+
   const byModel = useMemo(() => {
-    const map = new Map<string, { model: string; source: string; totals: ReturnType<typeof emptyTotals> }>();
+    type Row = {
+      model: string;
+      source: string;
+      baseUrl: string;
+      providerId: string;
+      totals: ReturnType<typeof emptyTotals>;
+    };
+    const map = new Map<string, Row>();
     for (const event of filtered) {
       const key = `${event.source}::${event.modelId}`;
+      const hit = providerByName.get(event.source || "");
       const row = map.get(key) ?? {
         model: event.modelId || t("未记录型号"),
         source: event.source || "—",
+        baseUrl: hit?.baseUrl ?? "",
+        providerId: hit?.id ?? "",
         totals: emptyTotals(),
       };
       addTotals(row.totals, event);
       map.set(key, row);
     }
     return [...map.values()].sort((a, b) => b.totals.tokens - a.totals.tokens);
-  }, [filtered, t]);
+  }, [filtered, providerByName, t]);
 
   const chart = useMemo(() => {
     const days = new Map<string, Record<UsageArea, number>>();
@@ -231,11 +255,15 @@ export function UsageStats({ onToast }: Props) {
   }, [areas, filtered]);
 
   function exportCsv() {
-    const header = "时间,专区,服务,模型,输入,输出,缓存读,缓存写,思考,请求,产出,花费USD";
+    // 导出的表头也跟着语言走 —— 用 Excel 打开时列名叫「时间/专区」还是 Time/Area 得一致。
+    const header = [
+      t("时间"), t("专区"), t("服务"), t("模型"), t("输入"), t("输出"),
+      t("缓存读"), t("缓存写"), t("思考"), t("请求"), t("产出"), t("花费USD"),
+    ].join(",");
     const rows = filtered.map((e) =>
       [
         new Date(e.at).toISOString(),
-        AREA_LABEL[e.area],
+        t(AREA_LABEL[e.area]),
         `"${e.source.replace(/"/g, '""')}"`,
         `"${e.modelId.replace(/"/g, '""')}"`,
         e.input,
@@ -589,8 +617,23 @@ export function UsageStats({ onToast }: Props) {
                     byModel.map((row) => (
                       <tr key={`${row.source}::${row.model}`} className="border-t border-line">
                         <td className="px-3 py-2">
-                          <div className="truncate font-medium">{row.model}</div>
-                          <div className="truncate text-[11px] text-muted">{row.source}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            {/* 和设置里的「模型图标」同一套（约定 93）：先按型号认，
+                                认不出再按接口地址认 —— 聚合平台上导出的 id 带厂商前缀。 */}
+                            <ModelIcon
+                              modelId={row.model}
+                              baseUrl={row.baseUrl}
+                              providerId={row.providerId}
+                              icons={prefs?.brandIcons ?? {}}
+                              className="size-4"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate font-medium">{row.model}</div>
+                              <div className="truncate text-[11px] text-muted">
+                                {t(row.source)}
+                              </div>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{count(row.totals.input)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{count(row.totals.output)}</td>

@@ -140,12 +140,14 @@ export function SettingsDialog({
       }
     }
     setSelectedId("new");
+    // 预设的名称和型号标签按**当前语言**写进表单：这是要存进 db 的用户数据，
+    // 存下来之后就不再跟着语言变了（用户在设置里改的也一样）。
     setForm({
-      name: template.name,
+      name: t(template.name),
       baseUrl: template.baseUrl,
       apiKey: "",
       clearKey: false,
-      models: template.models,
+      models: template.models.map((model) => ({ ...model, label: t(model.label) })),
       auth: template.auth || "api",
     });
     setError("");
@@ -419,7 +421,7 @@ export function SettingsDialog({
         ) : tab === "remote" ? (
           <RemoteSettings onToast={onToast} />
         ) : tab === "usage" ? (
-          <UsageStats onToast={onToast} />
+          <UsageStats onToast={onToast} providers={providers} prefs={prefs} />
         ) : tab === "imagine" && prefs && onPrefs ? (
           <ImagineSettings providers={providers} prefs={prefs} onChange={onPrefs} />
         ) : tab === "skills" && onReloadSkills ? (
@@ -516,7 +518,7 @@ export function SettingsDialog({
                     icons={prefs?.brandIcons ?? {}}
                     className="size-4"
                   />
-                  <span className="truncate text-sm font-medium">{provider.name}</span>
+                  <span className="truncate text-sm font-medium">{t(provider.name)}</span>
                 </div>
                 <div className="truncate text-[11px] text-muted">
                   {officialSpecForProvider(provider)
@@ -539,7 +541,7 @@ export function SettingsDialog({
                     onClick={() => applyTemplate(template.name)}
                     className="rounded-full border border-line px-3 py-1 text-xs transition-colors duration-150 hover:bg-user"
                   >
-                    {template.name}
+                    {t(template.name)}
                   </button>
                 ))}
               </div>

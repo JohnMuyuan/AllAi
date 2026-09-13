@@ -57,3 +57,6 @@ next-env.d.ts
 .strings.tmp.json
 *.tmp.json
 *.tmp.txt
+
+# AI 工作记忆（本地用，不进仓库）
+.workbuddy-ai/

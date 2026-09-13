@@ -210,10 +210,29 @@ export function applyCompaction<T extends { content?: string }>(
   return { head: compactionTurns(compaction), rest: messages.slice(compaction.folded) };
 }
 
-/** 压缩发生后给用户看的那句话。三个专区都用这一句，口径统一。 */
-export function compactNotice(compaction: Compaction, limitTokens: number): string {
-  const pct = Math.round((compaction.tokensBefore / Math.max(1, limitTokens)) * 100);
-  const saved = Math.max(0, compaction.tokensBefore - compaction.tokensAfter);
+/**
+ * 压缩发生后给用户看的那句话。三个专区都用这一句，口径统一。
+ *
+ * 拆成「模板 + 变量」两份，是为了能翻：服务端（不知道界面语言）直接调
+ * `compactNotice()`，界面上调 `t(COMPACT_NOTICE, compactNoticeVars(...))`。
+ * 别把数字拼进模板里 —— 拼进去就成了新 key，词典永远对不上。
+ */
+export const COMPACT_NOTICE =
+  "上下文已到 {pct}%（约 {before}/{limit}），已把更早的内容压成摘要，省下约 {saved} token。最近几轮保留原文。";
+
+export function compactNoticeVars(compaction: Compaction, limitTokens: number) {
   const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
-  return `上下文已到 ${pct}%（约 ${fmt(compaction.tokensBefore)}/${fmt(limitTokens)}），已把更早的内容压成摘要，省下约 ${fmt(saved)} token。最近几轮保留原文。`;
+  return {
+    pct: Math.round((compaction.tokensBefore / Math.max(1, limitTokens)) * 100),
+    before: fmt(compaction.tokensBefore),
+    limit: fmt(limitTokens),
+    saved: fmt(Math.max(0, compaction.tokensBefore - compaction.tokensAfter)),
+  };
+}
+
+export function compactNotice(compaction: Compaction, limitTokens: number): string {
+  const vars = compactNoticeVars(compaction, limitTokens);
+  return COMPACT_NOTICE.replace(/\{(\w+)\}/g, (whole, key: string) =>
+    key in vars ? String(vars[key as keyof typeof vars]) : whole,
+  );
 }

@@ -1,15 +1,33 @@
+import { BRAND_COLOR, BRAND_SHORT, type BrandId } from "@/lib/brand";
 import type { AgentKind } from "@/lib/types";
 
+/** 有矢量图的三家，其余牌子走品牌色块。 */
+const VECTOR_KIND: Partial<Record<BrandId, AgentKind>> = {
+  anthropic: "claude-code",
+  xai: "grok-build",
+  openai: "codex",
+};
+
 /**
- * 聊天模型没有 kind，只能按 id 认牌子。认不出来就不画图标 —— 
- * 画错牌子比不画更糟。
+ * 把一个牌子画成图标：有矢量图的用矢量图，其余画品牌色块，认不出就什么都不画。
+ *
+ * ⚠️ **认牌子的规则只在 `lib/brand.ts` 里存一份。** 这里以前抄过一份
+ * `brandOfModel`，两套规则各走各的，结果 `lib/brand.ts` 修了 `xai` 的误伤、
+ * 它没修 —— `MiniMaxAI/MiniMax-M2` 因为 "mini**maxai**" 里含 `xai`，
+ * 在模型切换条上被画成了 **Grok 的 logo**。
+ * 要加规则去 `lib/brand.ts`，别再在这儿另起一套。
  */
-export function brandOfModel(modelId: string): AgentKind | null {
-  const id = modelId.toLowerCase();
-  if (/claude|anthropic|sonnet|opus|haiku|fable/.test(id)) return "claude-code";
-  if (/grok|xai/.test(id)) return "grok-build";
-  if (/gpt|openai|^o1|^o3|^o4|codex|dall-e|astra|sora/.test(id)) return "codex";
-  return null;
+export function BrandGlyph({
+  brand,
+  className = "size-5",
+}: {
+  brand: BrandId | null;
+  className?: string;
+}) {
+  if (!brand) return null;
+  const kind = VECTOR_KIND[brand];
+  if (kind) return <BrandMark kind={kind} className={`${className} shrink-0`} />;
+  return <BrandMonogram brand={brand} className={className} />;
 }
 
 /** Official marks from public/brand (copied from vendor SVGs). */
@@ -43,6 +61,42 @@ export function BrandMark({ kind, className = "size-5" }: { kind: AgentKind; cla
         fillRule="evenodd"
         d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815"
       />
+    </svg>
+  );
+}
+
+/**
+ * 认出来、但我们没有矢量图的牌子（国内那批基本都是），画成
+ * 「品牌色底 + 缩写」的色块。
+ *
+ * 这不是官方 logo —— 只是让人一眼分得清是哪家。真图标让用户自己配
+ * （填个域名就抓得到）。**宁可给色块，也别硬画一个不像的 logo。**
+ */
+export function BrandMonogram({
+  brand,
+  className = "size-5",
+}: {
+  brand: BrandId;
+  className?: string;
+}) {
+  const color = BRAND_COLOR[brand] || "#6B7280";
+  const short = BRAND_SHORT[brand] || "?";
+  return (
+    <svg viewBox="0 0 24 24" className={`${className} shrink-0`} aria-hidden="true">
+      <rect x="0" y="0" width="24" height="24" rx="5.5" fill={color} />
+      <text
+        x="12"
+        y="12.5"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="#FFFFFF"
+        fontSize={short.length > 1 ? 9 : 12.5}
+        fontWeight="600"
+        letterSpacing={short.length > 1 ? "-0.3" : "0"}
+        fontFamily="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+      >
+        {short}
+      </text>
     </svg>
   );
 }

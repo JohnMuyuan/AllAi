@@ -267,7 +267,14 @@ process.on("message", async (message: Incoming) => {
           history: message.opts.history,
           elevated: message.opts.elevated,
         },
-        (event) => send({ type: "chat-event", sessionId: message.opts.sessionId, event }),
+        (event) => {
+          send({ type: "chat-event", sessionId: message.opts.sessionId, event });
+          // 一轮跑完就把句柄撤掉。chats 以前只增不删，每一轮都留一份
+          // （子进程引用 + 输出缓冲 + StringDecoder）常驻宿主进程 ——
+          // 用一天下来是几百份。done 说明进程已经 close，之后再收到 kill
+          // 就是 no-op，不会有别的影响。
+          if (event.type === "done") chats.delete(message.opts.sessionId);
+        },
       );
       chats.set(message.opts.sessionId, handle);
       send({ id: message.id, type: "result", result: { ok: true } });
@@ -359,7 +366,10 @@ process.on("message", async (message: Incoming) => {
           history: message.opts.history,
           elevated: message.opts.elevated,
         },
-        (event) => send({ type: "chat-event", sessionId: message.opts.sessionId, event }),
+        (event) => {
+          send({ type: "chat-event", sessionId: message.opts.sessionId, event });
+          if (event.type === "done") chats.delete(message.opts.sessionId);
+        },
       );
       chats.set(message.opts.sessionId, handle);
       send({ id: message.id, type: "result", result: { ok: true } });

@@ -82,7 +82,7 @@ function StudioMedia({
     return () => window.removeEventListener("click", close);
   }, [menu]);
 
-  const payload = uploadDragPayload({ ...output, prompt });
+  const payload = uploadDragPayload({ ...output, prompt }, t);
 
   return (
     <div

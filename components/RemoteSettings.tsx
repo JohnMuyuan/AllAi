@@ -340,9 +340,9 @@ export function RemoteSettings({ onToast }: { onToast?: (text: string) => void }
                   aria-label={t("移除设备")}
                   onClick={async () => {
                     const ok = await confirm({
-                      title: `移除「${device.name}」？`,
-                      detail: "它会立刻断开，以后要用得重新扫码配对。",
-                      confirmText: "移除",
+                      title: t("移除「{name}」？", { name: device.name }),
+                      detail: t("它会立刻断开，以后要用得重新扫码配对。"),
+                      confirmText: t("移除"),
                       danger: true,
                     });
                     if (!ok) return;

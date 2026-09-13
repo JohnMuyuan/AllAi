@@ -55,6 +55,7 @@ export function ModelSelect({
       label: item.label,
       modelId: item.key,
       provider: item.provider,
+      providerId: "",
       baseUrl: "",
     }));
     const models = providers.flatMap((provider) =>
@@ -68,6 +69,7 @@ export function ModelSelect({
           label: model.label || model.id,
           modelId: model.id,
           provider: provider.name,
+          providerId: provider.id,
           baseUrl: provider.baseUrl,
         })),
     );
@@ -151,6 +153,7 @@ export function ModelSelect({
           <ModelIcon
             modelId={selected.modelId}
             baseUrl={selected.baseUrl}
+            providerId={selected.providerId}
             icons={icons}
             className="size-4"
           />
@@ -159,7 +162,9 @@ export function ModelSelect({
           {selected ? selected.label : options.length ? t("选择模型") : t("还没有模型")}
         </span>
         {selected ? (
-          <span className="hidden truncate text-xs text-muted sm:inline">{selected.provider}</span>
+          <span className="hidden truncate text-xs text-muted sm:inline">
+            {t(selected.provider)}
+          </span>
         ) : null}
         <ChevronsUpDown className="size-3.5 shrink-0 text-muted" />
       </button>
@@ -208,13 +213,14 @@ export function ModelSelect({
                         <ModelIcon
                           modelId={item.modelId}
                           baseUrl={item.baseUrl}
+                          providerId={item.providerId}
                           icons={icons}
                           className="size-5"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium">{item.label}</div>
                           <div className="truncate text-xs text-muted">
-                            {item.provider} · {item.modelId}
+                            {t(item.provider)} · {item.modelId}
                           </div>
                         </div>
                         {active ? <Check className="size-4 shrink-0 text-accent" /> : null}
