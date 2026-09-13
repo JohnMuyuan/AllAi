@@ -28,6 +28,8 @@ const AREA_COLOR: Record<UsageArea, string> = {
   studio: "var(--chart-studio)",
 };
 const RANGES = [
+  { id: "current", label: "当前" },
+  { id: "1", label: "一天" },
   { id: "7", label: "7 天" },
   { id: "30", label: "30 天" },
   { id: "90", label: "90 天" },
@@ -124,7 +126,9 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [ccSwitch, setCcSwitch] = useState<CcSwitchPreview | null>(null);
-  const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("30");
+  const [range, setRange] = useState<(typeof RANGES)[number]["id"] | "custom">("30");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [areas, setAreas] = useState<UsageArea[]>(["chat", "agent", "studio"]);
   const [loading, setLoading] = useState(true);
   /** 读到数据的时刻，时间范围以它为准（渲染里不能直接调 Date.now）。 */
@@ -179,10 +183,20 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
   }, []);
 
   const filtered = useMemo(() => {
+    if (range === "custom" && customStart) {
+      const start = new Date(`${customStart}T00:00:00`).getTime();
+      const end = customEnd ? new Date(`${customEnd}T23:59:59.999`).getTime() : loadedAt;
+      return events.filter((item) => areas.includes(item.area) && item.at >= start && item.at <= end);
+    }
+    if (range === "current") {
+      const now = new Date(loadedAt || Date.now());
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return events.filter((item) => areas.includes(item.area) && item.at >= start);
+    }
     const days = range === "all" ? 0 : Number(range);
     const since = days && loadedAt ? loadedAt - days * 86400000 : 0;
     return events.filter((item) => areas.includes(item.area) && item.at >= since);
-  }, [areas, events, loadedAt, range]);
+  }, [areas, events, loadedAt, range, customStart, customEnd]);
 
   // 热力图自己挑跨度，所以只按专区筛，不按上面的时间范围筛。
   const heatmapEvents = useMemo(
@@ -354,6 +368,12 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
               {t(item.label)}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-1 rounded-xl border border-line px-2 py-1">
+          <span className="text-xs text-muted">{t("自定义")}</span>
+          <input type="date" value={customStart} onChange={(event) => { setCustomStart(event.target.value); setRange("custom"); }} className="bg-transparent text-xs outline-none" aria-label={t("起始日期")} />
+          <span className="text-xs text-muted">→</span>
+          <input type="date" value={customEnd} min={customStart || undefined} onChange={(event) => { setCustomEnd(event.target.value); setRange("custom"); }} className="bg-transparent text-xs outline-none" aria-label={t("结束日期")} />
         </div>
         <div className="flex flex-wrap gap-1">
           {(["chat", "agent", "studio"] as UsageArea[]).map((area) => {

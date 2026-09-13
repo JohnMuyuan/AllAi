@@ -143,6 +143,10 @@ const EN: Record<string, string> = {
   "今天": "Today",
   "昨天": "Yesterday",
   "过去 7 天": "Past 7 days",
+  "当前": "Today",
+  "一天": "24 hours",
+  "起始日期": "Start date",
+  "结束日期": "End date",
   "更早": "Earlier",
 
   /* 设置外壳 */
