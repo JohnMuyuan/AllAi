@@ -263,6 +263,15 @@ export function providerIconKey(providerId: string) {
   return `provider:${providerId || ""}`.toLowerCase();
 }
 
+/** 给某一条服务写/清图标。每次从最新的 map 出发，避免抓图回来时把别人刚配的盖掉。 */
+export function writeProviderIcon(icons: BrandIcons, providerId: string, icon: string): BrandIcons {
+  const next = { ...icons };
+  const key = providerIconKey(providerId);
+  if (icon) next[key] = icon;
+  else delete next[key];
+  return next;
+}
+
 /**
  * 找图标。优先级从具体到笼统：**单个模型 → 接口 → 厂商**。
  *

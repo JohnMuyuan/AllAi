@@ -9,7 +9,7 @@ import {
 } from "@/lib/official-chat";
 import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
-import { providerIconKey } from "@/lib/brand";
+import { providerIconKey, writeProviderIcon } from "@/lib/brand";
 import { PROVIDER_TEMPLATES } from "@/lib/templates";
 import { APP_VERSION } from "@/lib/version";
 import type { AppPrefs, ManagedSkill, ModelRef, ProviderAuth, PublicAgent, PublicProvider } from "@/lib/types";
@@ -126,10 +126,10 @@ export function SettingsDialog({
   const [notice, setNotice] = useState("");
   /** 新服务还没有 id，抓到的图标先搁这儿，保存之后再写进 prefs。 */
   const [iconDraft, setIconDraft] = useState("");
-  const selectedIdRef = useRef(selectedId);
+  const iconsRef = useRef(prefs?.brandIcons ?? {});
   useEffect(() => {
-    selectedIdRef.current = selectedId;
-  }, [selectedId]);
+    iconsRef.current = prefs?.brandIcons ?? {};
+  }, [prefs?.brandIcons]);
 
   function applyTemplate(name: string) {
     const template = PROVIDER_TEMPLATES.find((item) => item.name === name);
@@ -165,10 +165,8 @@ export function SettingsDialog({
 
   function patchProviderIcon(id: string, icon: string) {
     if (!onPrefs) return;
-    const next = { ...(prefs?.brandIcons ?? {}) };
-    const key = providerIconKey(id);
-    if (icon) next[key] = icon;
-    else delete next[key];
+    const next = writeProviderIcon(iconsRef.current, id, icon);
+    iconsRef.current = next;
     onPrefs({ brandIcons: next });
   }
 
@@ -697,15 +695,16 @@ export function SettingsDialog({
             )}
 
             <ProviderIconField
+              key={selectedId}
+              ownerId={selectedId}
               icon={
                 selectedId === "new"
                   ? iconDraft
                   : prefs?.brandIcons?.[providerIconKey(selectedId)] || ""
               }
               onIcon={(icon) => {
-                const id = selectedIdRef.current;
-                if (id === "new") setIconDraft(icon);
-                else patchProviderIcon(id, icon);
+                if (selectedId === "new") setIconDraft(icon);
+                else patchProviderIcon(selectedId, icon);
               }}
               autoSource={officialForm ? "" : form.baseUrl}
               auto={!officialForm && selectedId === "new"}

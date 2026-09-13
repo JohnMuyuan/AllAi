@@ -59,7 +59,7 @@ async function fetchDeclaredIcons(source: string): Promise<string[]> {
   try {
     const response = await fetch(url.toString(), {
       redirect: "follow",
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(2500),
       headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*" },
     });
     if (!response.ok) return [];
@@ -129,8 +129,43 @@ function sameOriginCandidates(url: URL): string[] {
 function fallbackCandidates(hostname: string): string[] {
   return [
     `https://favicon.cccyun.cc/${hostname}`,
-    `https://www.google.com/s2/favicons?sz=128&domain=${hostname}`,
+    `https://www.google.com/s2/favicons?sz=64&domain=${hostname}`,
   ];
+}
+
+/** 谁先抓到图谁赢，其余请求随它去。 */
+async function firstIcon(
+  urls: string[],
+  timeoutMs: number,
+): Promise<{ icon: string; from: string } | null> {
+  const unique = [...new Set(urls.filter(Boolean))];
+  if (!unique.length) return null;
+  return await new Promise((resolve) => {
+    let pending = unique.length;
+    let settled = false;
+    for (const url of unique) {
+      void grab(url, timeoutMs).then((result) => {
+        if (settled) return;
+        if ("icon" in result) {
+          settled = true;
+          resolve({ icon: result.icon, from: url });
+          return;
+        }
+        pending -= 1;
+        if (pending === 0) resolve(null);
+      });
+    }
+  });
+}
+
+/** api.x.ai /v1 这种地址，图标在站点根上，不在接口路径上。 */
+function siteOrigins(base: string): string[] {
+  const url = new URL(base);
+  const origins = [url.origin];
+  if (url.hostname.startsWith("api.") && url.hostname.split(".").length > 2) {
+    origins.push(`https://${url.hostname.slice(4)}`);
+  }
+  return origins;
 }
 
 /**
@@ -175,33 +210,37 @@ export async function POST(request: Request) {
   const target = parseTarget(source);
   if (!target) return NextResponse.json({ error: "看不懂这个地址" }, { status: 400 });
 
+  if (target.direct) {
+    const result = await grab(target.direct, 4000);
+    if ("icon" in result) return NextResponse.json({ icon: result.icon, from: target.direct });
+    return NextResponse.json(
+      { error: `${target.host} 上没找到图标（${result.error}）。可以直接填图片网址，或从本地选一张。` },
+      { status: 502 },
+    );
+  }
+
   /*
-   * 分两轮，别混在一起：
-   *   1. 用户自己的站（页面声明的图标 + 标准路径）—— 失败要**说清楚是哪一步**，
-   *      因为这是用户能改的（换成图片网址、或直接上传一张）。
-   *   2. 第三方图标服务 —— 它挂了是**我们的**问题，不该拿它的 host 去烦用户。
-   * 两轮的错分开记，最后优先报第一轮里「图不行」那类（最有指导性）。
+   * 并行：站点根上的 favicon 往往一秒内就有结果。
+   * 以前一条条 6 秒超时排着试，接口地址（/v1）还当网页去抓，所以会感觉特别慢。
+   * HTML 声明和第三方兜底同时开，谁先到用谁。
    */
-  const declared = target.direct ? [] : await fetchDeclaredIcons(source);
-  const own = target.direct
-    ? [target.direct]
-    : [...declared, ...sameOriginCandidates(new URL(target.base))];
+  const origins = siteOrigins(target.base);
+  const quick = origins.flatMap((origin) => sameOriginCandidates(new URL(origin)));
+  const pagePromise = Promise.all(origins.map((origin) => fetchDeclaredIcons(origin)));
 
-  let ownError = "";
-  for (const url of own) {
-    const result = await grab(url, 6000);
-    if ("icon" in result) return NextResponse.json({ icon: result.icon, from: url });
-    // 「不是图片 / 太大」比「连不上」有用，优先留下。
-    if (!ownError || /不是图片|太大|空文件/.test(result.error)) ownError = result.error;
-  }
+  const fast = await firstIcon(quick, 2500);
+  if (fast) return NextResponse.json({ icon: fast.icon, from: fast.from });
 
-  for (const url of fallbackCandidates(target.host)) {
-    const result = await grab(url, 4000);
-    if ("icon" in result) return NextResponse.json({ icon: result.icon, from: url });
-  }
+  const declared = (await pagePromise).flat();
+  const fromPage = await firstIcon(declared, 2500);
+  if (fromPage) return NextResponse.json({ icon: fromPage.icon, from: fromPage.from });
+
+  const fallback = origins.flatMap((origin) => fallbackCandidates(new URL(origin).hostname));
+  const last = await firstIcon(fallback, 2000);
+  if (last) return NextResponse.json({ icon: last.icon, from: last.from });
 
   return NextResponse.json(
-    { error: `${target.host} 上没找到图标（${ownError || "没有可用的图标文件"}）。可以直接填图片网址，或从本地选一张。` },
+    { error: `${target.host} 上没找到图标。可以直接填图片网址，或从本地选一张。` },
     { status: 502 },
   );
 }

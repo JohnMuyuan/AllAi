@@ -1,9 +1,9 @@
 "use client";
 
 import { Globe, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConfirm } from "./ConfirmDialog";
-import { providerIconKey, type BrandIcons } from "@/lib/brand";
+import { providerIconKey, writeProviderIcon, type BrandIcons } from "@/lib/brand";
 import { useT } from "./I18n";
 import { ProviderIconField } from "./ProviderIconField";
 import type { PublicEndpoint } from "@/lib/types";
@@ -38,6 +38,10 @@ export function GlobalEndpointsPanel({
   const [notice, setNotice] = useState("");
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
   const [freshIds, setFreshIds] = useState<Record<string, true>>({});
+  const iconsRef = useRef(icons);
+  useEffect(() => {
+    iconsRef.current = icons;
+  }, [icons]);
 
   useEffect(() => {
     void fetch("/api/agent-endpoints")
@@ -72,10 +76,8 @@ export function GlobalEndpointsPanel({
 
   function patchIcon(id: string, icon: string) {
     if (!onIcons) return;
-    const next = { ...icons };
-    const key = providerIconKey(id);
-    if (icon) next[key] = icon;
-    else delete next[key];
+    const next = writeProviderIcon(iconsRef.current, id, icon);
+    iconsRef.current = next;
     onIcons(next);
   }
 
@@ -216,6 +218,8 @@ export function GlobalEndpointsPanel({
                   className="w-full rounded-xl border border-line bg-elevated px-3 py-2 font-mono text-sm outline-none focus:border-accent"
                 />
                 <ProviderIconField
+                  key={item.id}
+                  ownerId={item.id}
                   icon={icons[providerIconKey(item.id)] || ""}
                   onIcon={(icon) => patchIcon(item.id, icon)}
                   autoSource={item.baseUrl}

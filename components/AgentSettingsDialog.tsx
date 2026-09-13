@@ -3,7 +3,7 @@
 import { Globe, LogIn, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { kindInfo } from "@/lib/agents";
-import { providerIconKey, type BrandIcons } from "@/lib/brand";
+import { providerIconKey, writeProviderIcon, type BrandIcons } from "@/lib/brand";
 import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
 import { officialModelsNeedRefresh, syncAgentEndpointModels } from "@/lib/sync-agent-models";
@@ -59,6 +59,10 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
   const [notice, setNotice] = useState("");
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
   const [freshIds, setFreshIds] = useState<Record<string, true>>({});
+  const iconsRef = useRef(icons);
+  useEffect(() => {
+    iconsRef.current = icons;
+  }, [icons]);
   const [authStatus, setAuthStatus] = useState<CliAuthStatus | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const officialSyncTried = useRef(false);
@@ -106,10 +110,8 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
 
   function patchEndpointIcon(id: string, icon: string) {
     if (!onIcons) return;
-    const next = { ...icons };
-    const key = providerIconKey(id);
-    if (icon) next[key] = icon;
-    else delete next[key];
+    const next = writeProviderIcon(iconsRef.current, id, icon);
+    iconsRef.current = next;
     onIcons(next);
   }
 
@@ -488,6 +490,8 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                       className="w-full rounded-xl border border-line bg-elevated px-3 py-2 font-mono text-sm outline-none focus:border-accent"
                     />
                     <ProviderIconField
+                      key={item.id}
+                      ownerId={item.id}
                       icon={icons[providerIconKey(item.id)] || ""}
                       onIcon={(icon) => patchEndpointIcon(item.id, icon)}
                       autoSource={item.baseUrl}

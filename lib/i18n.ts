@@ -1191,7 +1191,9 @@ const EN: Record<string, string> = {
   /* 模型图标设置（components/BrandIconSettings.tsx） */
   "品牌色块": "Brand tile",
   "模型名前面的厂商图标。Anthropic / xAI / OpenAI 是自带的矢量图，其余认得出牌子的画品牌色块（DeepSeek、通义、Kimi、智谱这些都有）。想换成真图标：填网站域名会去它页面上找图标，填图片网址就直接用那张图，也可以从本地选一张。给「接口」配的图标会盖住它下面所有模型的厂商图标 —— 比逐个厂商配省事，又比按单个模型配省得重复。图标存在本机，不会每次渲染都去打别人的服务器。":
-    "The vendor icon in front of each model name. Anthropic / xAI / OpenAI ship as vector art; other recognized vendors get a color tile with their initials (DeepSeek, Qwen, Kimi, Zhipu and more). To use a real icon: type a site domain and we pull the icon off that page, paste an image URL to use it directly, or choose a file from disk. An icon set on an endpoint overrides the vendor icon for every model under it — coarser than per-vendor, less repetitive than per-model. Icons are stored locally — nothing is fetched from someone else’s server while rendering.",
+    "The vendor icon in front of each model name. Anthropic / xAI / OpenAI ship as vector art; other recognized vendors get a color tile with their initials (DeepSeek, Qwen, Kimi, Zhipu and more). To use a real icon: type a site domain and we pull the icon off that page, paste an image URL to use it directly, or choose a file from disk. Icons are stored locally.",
+  "模型名前面的厂商图标。Anthropic / xAI / OpenAI 是自带的矢量图，其余认得出牌子的画品牌色块（DeepSeek、通义、Kimi、智谱这些都有）。想换成真图标：填网站域名会去它页面上找图标，填图片网址就直接用那张图，也可以从本地选一张。某一条服务自己的图标去「聊天模型 / Agent 接口」里那条服务上配。图标存在本机，不会每次渲染都去打别人的服务器。":
+    "The vendor icon in front of each model name. Anthropic / xAI / OpenAI ship as vector art; other recognized vendors get a color tile (DeepSeek, Qwen, Kimi, Zhipu and more). To use a real icon: type a site domain, paste an image URL, or choose a file. A provider’s own icon is set on that service under Chat models / Agent endpoints. Icons stay on this PC.",
   "接口（配了这个，它下面的模型都跟着换）": "Endpoints (this overrides every model under it)",
   "接口默认": "Endpoint default",
 

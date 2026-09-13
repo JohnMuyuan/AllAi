@@ -4,11 +4,12 @@ import { Download, RotateCcw, Server, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "./I18n";
 
-async function fetchSiteIcon(source: string): Promise<string> {
+async function fetchSiteIcon(source: string, signal: AbortSignal): Promise<string> {
   const response = await fetch("/api/brand-icon", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source }),
+    signal,
   });
   const data = (await response.json()) as { icon?: string; error?: string };
   if (!response.ok || !data.icon) throw new Error(data.error || "抓不到图标");
@@ -27,57 +28,73 @@ function looksLikeSite(source: string) {
 }
 
 type Props = {
-  /** 当前图标，data URI。空字符串表示还没配。 */
+  /** 这一条服务的 id。切到另一条时必须换，状态才不会串。 */
+  ownerId: string;
   icon: string;
   onIcon: (icon: string) => void;
-  /** 接口地址。auto 打开且还没配图标时，用它去抓网站图标。 */
   autoSource?: string;
   auto?: boolean;
   onToast?: (text: string) => void;
 };
 
 /**
- * 给某一个服务 / 接口配图标。
- *
- * 用在「添加服务」和每条接口自己的设置里：第一次填地址会自动抓网站图标，
- * 之后可以改网址再抓，或从本地选一张图。
+ * 给**这一条**服务配图标。父组件要用 `key={ownerId}` 挂载，
+ * 切提供商时整棵拆掉，输入框和图标都不会带到下一家。
  */
-export function ProviderIconField({ icon, onIcon, autoSource = "", auto = false, onToast }: Props) {
+export function ProviderIconField({
+  ownerId,
+  icon,
+  onIcon,
+  autoSource = "",
+  auto = false,
+  onToast,
+}: Props) {
   const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const fetchedFor = useRef("");
-  const generation = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const alive = useRef(true);
 
   useEffect(() => {
-    if (!auto || icon || busy) return;
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      abortRef.current?.abort();
+    };
+  }, [ownerId]);
+
+  useEffect(() => {
+    if (!auto || icon) return;
     if (!looksLikeSite(autoSource)) return;
     if (fetchedFor.current === autoSource) return;
     const handle = window.setTimeout(() => {
       fetchedFor.current = autoSource;
       void grab(autoSource, true);
-    }, 500);
+    }, 400);
     return () => window.clearTimeout(handle);
-    // busy / grab 不能进 deps：抓的过程里 busy 会变，不该取消这次自动抓。
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在地址或是否已有图标变化时再考虑自动抓
-  }, [auto, autoSource, icon]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只跟地址和图标走，grab 是稳定的对本条 owner 的闭包
+  }, [auto, autoSource, icon, ownerId]);
 
   async function grab(source: string, silent = false) {
     if (!source.trim()) return;
-    const mine = ++generation.current;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setBusy(true);
     try {
-      const next = await fetchSiteIcon(source);
-      if (mine !== generation.current) return;
+      const next = await fetchSiteIcon(source, ac.signal);
+      if (!alive.current || ac.signal.aborted) return;
       onIcon(next);
       setDraft("");
       if (!silent) onToast?.(t("图标已保存"));
     } catch (error) {
-      if (mine !== generation.current) return;
+      if (!alive.current || ac.signal.aborted) return;
+      if (error instanceof DOMException && error.name === "AbortError") return;
       if (!silent) onToast?.(error instanceof Error ? t(error.message) : t("抓不到图标"));
     } finally {
-      if (mine === generation.current) setBusy(false);
+      if (alive.current && abortRef.current === ac) setBusy(false);
     }
   }
 
@@ -87,7 +104,9 @@ export function ProviderIconField({ icon, onIcon, autoSource = "", auto = false,
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => onIcon(String(reader.result || ""));
+    reader.onload = () => {
+      if (alive.current) onIcon(String(reader.result || ""));
+    };
     reader.onerror = () => onToast?.(t("读取图片失败"));
     reader.readAsDataURL(file);
   }
@@ -142,6 +161,7 @@ export function ProviderIconField({ icon, onIcon, autoSource = "", auto = false,
         <button
           type="button"
           onClick={() => {
+            abortRef.current?.abort();
             fetchedFor.current = "";
             onIcon("");
           }}
