@@ -623,7 +623,6 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
                             <ModelIcon
                               modelId={row.model}
                               baseUrl={row.baseUrl}
-                              providerId={row.providerId}
                               icons={prefs?.brandIcons ?? {}}
                               className="size-4"
                             />

@@ -133,46 +133,111 @@ function fallbackCandidates(hostname: string): string[] {
   ];
 }
 
-/** 谁先抓到图谁赢，其余请求随它去。 */
-async function firstIcon(
+/** 这一波里挑最大的一张。1×1 / 空 SVG 那种「秒抓到的寂寞」直接丢掉。 */
+async function bestIcon(
   urls: string[],
   timeoutMs: number,
 ): Promise<{ icon: string; from: string } | null> {
   const unique = [...new Set(urls.filter(Boolean))];
   if (!unique.length) return null;
-  return await new Promise((resolve) => {
-    let pending = unique.length;
-    let settled = false;
-    for (const url of unique) {
-      void grab(url, timeoutMs).then((result) => {
-        if (settled) return;
-        if ("icon" in result) {
-          settled = true;
-          resolve({ icon: result.icon, from: url });
-          return;
-        }
-        pending -= 1;
-        if (pending === 0) resolve(null);
-      });
-    }
-  });
+  const hits = await Promise.all(
+    unique.map(async (url) => {
+      const result = await grab(url, timeoutMs);
+      if ("icon" in result) return { icon: result.icon, from: url, width: result.width };
+      return null;
+    }),
+  );
+  const ok = hits.filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (!ok.length) return null;
+  ok.sort((a, b) => b.width - a.width);
+  return { icon: ok[0].icon, from: ok[0].from };
 }
 
 /** api.x.ai /v1 这种地址，图标在站点根上，不在接口路径上。 */
 function siteOrigins(base: string): string[] {
   const url = new URL(base);
+  const host = url.hostname;
   const origins = [url.origin];
-  if (url.hostname.startsWith("api.") && url.hostname.split(".").length > 2) {
-    origins.push(`https://${url.hostname.slice(4)}`);
+  if (host.startsWith("api.") && host.split(".").length > 2) {
+    origins.push(`https://${host.slice(4)}`);
   }
-  return origins;
+  if (!host.startsWith("www.") && host.split(".").length >= 2) {
+    origins.push(`https://www.${host}`);
+  }
+  return [...new Set(origins)];
+}
+
+const MIN_BYTES = 120;
+const MIN_EDGE = 16;
+
+/** 读出宽高。读不出来又太小的当废图。 */
+function imageSize(buffer: Buffer, type: string): { width: number; height: number } | null {
+  if (buffer.length < MIN_BYTES) return null;
+  const mime = type.toLowerCase();
+  if (mime.includes("svg")) {
+    const text = buffer.toString("utf8");
+    if (!/<svg[\s>]/i.test(text)) return null;
+    if (!/<path|<rect|<circle|<ellipse|<polygon|<image|<use|<g[\s>]/i.test(text)) return null;
+    const box = /viewBox=["']?[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)/i.exec(text);
+    const w = Number(/width=["']?([\d.]+)/i.exec(text)?.[1] || box?.[1] || 64);
+    const h = Number(/height=["']?([\d.]+)/i.exec(text)?.[1] || box?.[2] || 64);
+    if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
+    return { width: w, height: h };
+  }
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    if (buffer.length < 24) return null;
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+    if (buffer.length < 10) return null;
+    return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+  }
+  if (buffer[0] === 0 && buffer[1] === 0 && buffer[2] === 1 && buffer[3] === 0) {
+    const count = buffer[4];
+    if (!count || buffer.length < 6 + count * 16) return null;
+    let edge = 0;
+    for (let i = 0; i < count; i++) {
+      const w = buffer[6 + i * 16] || 256;
+      const h = buffer[7 + i * 16] || 256;
+      edge = Math.max(edge, Math.min(w, h));
+    }
+    return { width: edge, height: edge };
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < buffer.length) {
+      if (buffer[i] !== 0xff) break;
+      const marker = buffer[i + 1];
+      const len = buffer.readUInt16BE(i + 2);
+      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7)) {
+        return { height: buffer.readUInt16BE(i + 5), width: buffer.readUInt16BE(i + 7) };
+      }
+      i += 2 + len;
+    }
+  }
+  if (buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") {
+    const kind = buffer.toString("ascii", 12, 16);
+    if (kind === "VP8X" && buffer.length >= 30) {
+      const width = 1 + buffer[24] + (buffer[25] << 8) + (buffer[26] << 16);
+      const height = 1 + buffer[27] + (buffer[28] << 8) + (buffer[29] << 16);
+      return { width, height };
+    }
+    if (kind === "VP8 " && buffer.length >= 30) {
+      return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff };
+    }
+  }
+  if (buffer.length >= 800) return { width: 32, height: 32 };
+  return null;
 }
 
 /**
  * 抓一个候选。成功给 data URI，失败给一句**能直接给用户看**的人话
  * （不带 host —— 由调用方按「是用户自己的站还是第三方服务」决定怎么讲）。
  */
-async function grab(url: string, timeoutMs: number): Promise<{ icon: string } | { error: string }> {
+async function grab(
+  url: string,
+  timeoutMs: number,
+): Promise<{ icon: string; width: number } | { error: string }> {
   try {
     const response = await fetch(url, {
       redirect: "follow",
@@ -183,12 +248,15 @@ async function grab(url: string, timeoutMs: number): Promise<{ icon: string } | 
     const type = (response.headers.get("content-type") || "").split(";")[0].trim();
     if (!OK_TYPES.test(type)) return { error: `不是图片（${type || "未知类型"}）` };
     const buffer = Buffer.from(await response.arrayBuffer());
-    if (!buffer.length) return { error: "抓到的是空文件" };
+    const size = imageSize(buffer, type);
+    if (!size || Math.min(size.width, size.height) < MIN_EDGE) {
+      return { error: "图太小或空的" };
+    }
     const icon = `data:${type};base64,${buffer.toString("base64")}`;
     if (icon.length > MAX_DATA_URI) {
       return { error: `图片太大（${Math.round(buffer.length / 1024)}KB），换一张小图或直接填图片网址` };
     }
-    return { icon };
+    return { icon, width: Math.min(size.width, size.height) };
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     return { error: /abort|timeout/i.test(message) ? "连接超时" : "连不上" };
@@ -228,15 +296,15 @@ export async function POST(request: Request) {
   const quick = origins.flatMap((origin) => sameOriginCandidates(new URL(origin)));
   const pagePromise = Promise.all(origins.map((origin) => fetchDeclaredIcons(origin)));
 
-  const fast = await firstIcon(quick, 2500);
+  const fast = await bestIcon(quick, 2500);
   if (fast) return NextResponse.json({ icon: fast.icon, from: fast.from });
 
   const declared = (await pagePromise).flat();
-  const fromPage = await firstIcon(declared, 2500);
+  const fromPage = await bestIcon(declared, 2500);
   if (fromPage) return NextResponse.json({ icon: fromPage.icon, from: fromPage.from });
 
   const fallback = origins.flatMap((origin) => fallbackCandidates(new URL(origin).hostname));
-  const last = await firstIcon(fallback, 2000);
+  const last = await bestIcon(fallback, 2000);
   if (last) return NextResponse.json({ icon: last.icon, from: last.from });
 
   return NextResponse.json(

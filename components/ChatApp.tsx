@@ -3935,7 +3935,6 @@ ${summary}`;
                 <ModelIcon
                   modelId={chatModelSource.modelId}
                   baseUrl={chatModelSource.baseUrl}
-                  providerId={chatModelSource.providerId}
                   icons={prefs.brandIcons ?? {}}
                   className="size-10"
                 />

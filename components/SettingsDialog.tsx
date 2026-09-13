@@ -20,7 +20,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { useT } from "./I18n";
 import { AgentSettingsPanel } from "./AgentSettingsDialog";
 import { GlobalEndpointsPanel } from "./GlobalEndpoints";
-import { ModelIcon } from "./ModelIcon";
+import { ModelIcon, ServiceIcon } from "./ModelIcon";
 import { ProviderIconField } from "./ProviderIconField";
 import { GeneralSettings } from "./GeneralSettings";
 import { ImagineSettings } from "./ImagineSettings";
@@ -536,10 +536,9 @@ export function SettingsDialog({
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <ModelIcon
-                    modelId={provider.models[0]?.id || ""}
-                    baseUrl={provider.baseUrl}
+                  <ServiceIcon
                     providerId={provider.id}
+                    baseUrl={provider.baseUrl}
                     icons={prefs?.brandIcons ?? {}}
                     className="size-4"
                   />
@@ -735,12 +734,7 @@ export function SettingsDialog({
                       <ModelIcon
                         modelId={model.id}
                         baseUrl={form.baseUrl}
-                        providerId={selectedId === "new" ? "draft" : selectedId}
-                        icons={
-                          selectedId === "new" && iconDraft
-                            ? { ...(prefs?.brandIcons ?? {}), [providerIconKey("draft")]: iconDraft }
-                            : prefs?.brandIcons ?? {}
-                        }
+                        icons={prefs?.brandIcons ?? {}}
                         className="size-3.5"
                       />
                       {model.label}

@@ -273,23 +273,21 @@ export function writeProviderIcon(icons: BrandIcons, providerId: string, icon: s
 }
 
 /**
- * 找图标。优先级从具体到笼统：**单个模型 → 接口 → 厂商**。
- *
- * 接口排在厂商前面：一个中转站上可能挂着好几家的模型，用户给这个接口配了图标，
- * 就是要让它们都换掉；厂商图标是「所有地方都换」那一档，更笼统。
+ * 某一条服务自己的图标。只给服务那一行用，
+ * 旗下模型不走这里 —— 聚合站上各家还是各画各的。
  */
-export function iconFor(
-  icons: BrandIcons,
-  modelId: string,
-  baseUrl = "",
-  providerId = "",
-): string | null {
+export function serviceIcon(icons: BrandIcons, providerId: string): string | null {
+  if (!providerId) return null;
+  return icons[providerIconKey(providerId)] || null;
+}
+
+/**
+ * 模型名前面的图标：这一只模型自己配的 → 这一家厂商配的。
+ * 不看供应商图标。
+ */
+export function iconFor(icons: BrandIcons, modelId: string, baseUrl = ""): string | null {
   const id = (modelId || "").toLowerCase();
   if (id && icons[id]) return icons[id];
-  if (providerId) {
-    const own = icons[providerIconKey(providerId)];
-    if (own) return own;
-  }
   const brand = brandFor(modelId, baseUrl);
   if (brand && icons[brand]) return icons[brand];
   return null;

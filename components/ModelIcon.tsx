@@ -1,30 +1,26 @@
 "use client";
 
-import { brandFor, iconFor, type BrandIcons } from "@/lib/brand";
+import { Server } from "lucide-react";
+import { brandFor, brandFromHost, iconFor, serviceIcon, type BrandIcons } from "@/lib/brand";
 import { BrandGlyph } from "./BrandMarks";
 
 /**
- * 模型名前面的厂商图标。
- * 顺序：用户自己配的图 → 内置矢量图（三家）→ 品牌色块（其余认得出的牌子）→ 什么都不画。
- *
- * 色块这一档是给国内模型准备的：以前认得出 DeepSeek / 通义 / Kimi / 智谱
- * 也不画任何东西，看着就像「没认出来」。认不出牌子的仍然留白（不画错）。
+ * 模型名前面的图标。
+ * 顺序：这只模型自己配的图 → 内置矢量图 → 品牌色块 → 什么都不画。
+ * 供应商图标不走这里。
  */
 export function ModelIcon({
   modelId,
   baseUrl = "",
-  providerId = "",
   icons = {},
   className = "size-4",
 }: {
   modelId: string;
   baseUrl?: string;
-  /** 模型所属接口的 id。给了就能用上「给接口配的图标」。 */
-  providerId?: string;
   icons?: BrandIcons;
   className?: string;
 }) {
-  const custom = iconFor(icons, modelId, baseUrl, providerId);
+  const custom = iconFor(icons, modelId, baseUrl);
   if (custom) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- 用户自己配的图标，可能是任意来源
@@ -38,4 +34,36 @@ export function ModelIcon({
   }
 
   return <BrandGlyph brand={brandFor(modelId, baseUrl)} className={className} />;
+}
+
+/**
+ * 左侧「这条服务」自己的图标。配过就用配的那张，
+ * 没配再按接口地址认牌子，再没有就中性占位。
+ */
+export function ServiceIcon({
+  providerId,
+  baseUrl = "",
+  icons = {},
+  className = "size-4",
+}: {
+  providerId: string;
+  baseUrl?: string;
+  icons?: BrandIcons;
+  className?: string;
+}) {
+  const own = serviceIcon(icons, providerId);
+  if (own) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 用户自己配的图标，可能是任意来源
+      <img
+        src={own}
+        alt=""
+        aria-hidden="true"
+        className={`${className} shrink-0 rounded-[4px] object-contain`}
+      />
+    );
+  }
+  const brand = brandFromHost(baseUrl);
+  if (brand) return <BrandGlyph brand={brand} className={className} />;
+  return <Server className={`${className} shrink-0 text-muted opacity-60`} />;
 }

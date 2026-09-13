@@ -50,7 +50,6 @@ function Select({
     <ModelIcon
       modelId={item.modelId}
       baseUrl={item.baseUrl}
-      providerId={item.providerId}
       icons={icons ?? {}}
       className="size-4"
     />

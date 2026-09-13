@@ -153,7 +153,6 @@ export function ModelSelect({
           <ModelIcon
             modelId={selected.modelId}
             baseUrl={selected.baseUrl}
-            providerId={selected.providerId}
             icons={icons}
             className="size-4"
           />
@@ -213,7 +212,6 @@ export function ModelSelect({
                         <ModelIcon
                           modelId={item.modelId}
                           baseUrl={item.baseUrl}
-                          providerId={item.providerId}
                           icons={icons}
                           className="size-5"
                         />

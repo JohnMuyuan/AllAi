@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.16.45**，安装包 `dist/AllAi-Setup-0.16.45.exe`。
+给下一轮对话或下一个人用。当前发版 **0.16.46**，安装包 `dist/AllAi-Setup-0.16.46.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -561,12 +561,10 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 92. **拿到异步结果先对一下还是不是当前那条。** `selectConversation` / `selectWork` 都栽过：点了 A 又马上点 B，A 的结果后到就把界面整块换成 A（侧栏还高亮着 B），连模型和思考档位都被改成 A 的。大对话 / 长会话加载慢的时候很容易撞上。做法是用一个 ref 记住最近一次点的是哪个 id，`await` 之后先比一次，不是它就丢掉。凡是「点一下 → 异步拉数据 → 整体 setState」的路径都要这么对一次。
 93. **认模型牌子只有 `lib/brand.ts` 一份规则，别在别处再抄一份。** 抄一份的下场是两边会漂移：0.16.42 之前 `components/BrandMarks.tsx` 里有个 `brandOfModel`，`lib/brand.ts` 修了 `xai` 的误伤它没修，结果 `MiniMaxAI/MiniMax-M2` 因为 "mini**maxai**" 含 `xai`，在模型切换条上被画成 **Grok 的 logo**。现在 `BrandMarks` 只管「怎么画」（`BrandGlyph`：有矢量图用矢量图，其余画品牌色块），认不认得出全问 `brandFor()`。**规则表的顺序有意义**：越具体的越靠前（`nvidia` 在 `llama` 前、`gpt`/`^o[134]` 在最后）。认不出的牌子**宁可留白也别硬画**。
 94. **抓站点图标：根路径 favicon 并行先抓，页面 `<link rel="icon">` 同时开。** 国内站点（硅基流动 / 智谱 / 火山方舟 / 阿里百炼）常把图标写在 `<link>` 或 CDN 上。**不要拿接口路径（`/v1`）当网页读**，去 origin；`api.x.ai` 顺带试 `x.ai`。超时 2–2.5 秒，谁先到用谁。错误信息只提用户填的那个域名。`ProviderIconField` 必须 `key={ownerId}`，切提供商要拆掉整棵，抓到一半 abort，禁止把结果写到当前那条。
-95. **图标查找的顺序是「单个模型 → 接口 → 厂商」（`lib/brand.ts` 的 `iconFor`）。** 接口的 key 是
-   `provider:<id>`，带前缀是为了不和模型 id / 厂商 id 撞车（`app/api/prefs` 存的时候会统一小写）。
-   接口排在厂商前面：一个中转站上可能挂着好几家的模型，用户给接口配了图标就是要它们都换掉。
-   `ModelIcon` 多了个 `providerId` 参数，凡是手里有接口的地方（`ModelSelect` / 使用统计 /
-   空状态）都要传，否则接口图标不生效。**接口行没配图标时画中性占位（服务器图标），
-   不要拿第一个模型的厂商图标冒充** —— OpenRouter 上挂着十几家，那么画是骗人的。
+95. **模型图标和供应商图标是两回事。** 模型名前面只看「这只模型自己配的 → 这一家厂商」
+   （`iconFor` / `ModelIcon`）。供应商自己的图只出现在那条服务上（`serviceIcon` /
+   `ServiceIcon`），**不要盖到旗下模型上** —— 聚合站上 DeepSeek / 通义 / GPT 还是各画各的。
+   key 仍是 `provider:<id>`。抓图时丢掉过小或空的图（1×1、空 SVG），同一波里挑最大的。
 96. **翻译只翻「显示」，不翻「数据」，更不翻发给模型的东西。** 词典用中文原文当 key，
    没翻的自动回落中文，所以界面不会出现空白。这三条绝对不能进词典（翻了会直接弄坏功能）：
    协议标记、斜杠指令的中文别名（`lib/cli-commands.ts` 里 `压缩`/`清空` 是**输入**不是显示）、
@@ -755,11 +753,13 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.16.45**，安装包 `dist/AllAi-Setup-0.16.45.exe`，桌面快捷方式已更新。
+当前发版 **0.16.46**，安装包 `dist/AllAi-Setup-0.16.46.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
-**最近刚做完（0.16.45）：** 抓图标并行、切提供商不串状态；「模型图标」里的接口组已删。`ProviderIconField` 必须 `key={ownerId}`，抓到一半要 abort。
+**最近刚做完（0.16.46）：** 供应商图标不盖旗下模型；抓图丢掉空白小图。模型走 `ModelIcon`，服务走 `ServiceIcon`。
+
+**更早（0.16.45）：** 抓图标并行、切提供商不串状态；「模型图标」里的接口组已删。`ProviderIconField` 必须 `key={ownerId}`，抓到一半要 abort。
 
 **更早（0.16.44）：** 添加聊天服务 / Agent 接口时在本条设置里配图标。组件 `components/ProviderIconField.tsx`，仍走 `/api/brand-icon` 和 `provider:<id>`。
 
