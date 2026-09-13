@@ -17,6 +17,22 @@
   --chart-chat: #4f46e5;
   --chart-agent: #0d9488;
   --chart-studio: #d97706;
+  /*
+   * 额度监控。模型占比的分类色按「固定顺序」取前 6 个（dataviz 参考色板，
+   * 已对本页底色 --canvas 跑过色盲 / 对比度校验：浅色有 3 个低于 3:1，所以占比旁边一定要有表格和文字）。
+   * 状态色只表示好坏，永远配图标和文字，不拿来区分系列。
+   */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-other: #a1a1aa;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
 }
 
 html.dark img.brand-invert,
@@ -40,6 +56,13 @@ html.dark {
   --chart-chat: #818cf8;
   --chart-agent: #2dd4bf;
   --chart-studio: #fbbf24;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-other: #52525b;
 }
 
 @theme inline {

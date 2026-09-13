@@ -202,6 +202,12 @@ async function fromCodexCli() {
 }
 
 export async function collectSuppliers(agents: AgentProfile[]) {
+  /*
+   * 跑回归时拿临时 ALLAI_DATA_DIR 起 dev server：不关掉的话，本机 CLI 配置里的真实中转站和 Key
+   * 会被导进那个临时目录。启动时（lib/store.ts）和界面调的 POST /api/providers/scan 都走这里，
+   * 所以开关只放这一处（0.16.38 只挡了启动那条，界面那条漏了）。
+   */
+  if (process.env.ALLAI_NO_SUPPLIER_SCAN === "1") return [];
   const merged: ScannedSupplier[] = [];
   for (const item of [
     ...fromAgents(agents),

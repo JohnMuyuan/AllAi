@@ -3,6 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
+import { recordQuotaSamples } from "./quota-history";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,12 @@ export type OfficialQuota = {
   credits?: number;
   /** 官方发放的手动重置次数。 */
   resetCredits?: number;
+  /** 5 小时窗口什么时候重置（ISO）。Claude 这个窗口还没开始用时接口给 null。 */
+  fiveHourReset?: string;
+  /** 周窗口从什么时候开始（ISO）。只有 Grok 直接给；别家用 weekReset - 7 天推。 */
+  weekStart?: string;
+  /** 订阅档位（plus / pro …），目前只有 ChatGPT 给。 */
+  plan?: string;
 };
 
 export type OfficialQuotaMap = {
@@ -151,13 +158,15 @@ function grokAuthHeaders(key: string) {
   ];
 }
 
-function parseGrokCredits(buf: Buffer): { weekPct: number; weekReset?: string } | undefined {
+function parseGrokCredits(buf: Buffer): { weekPct: number; weekReset?: string; weekStart?: string } | undefined {
   const payload = grpcPayload(buf);
   if (!payload || payload.length === 0) return undefined;
   const root = readFields(payload);
   const config = root.find((item) => item.field === 1 && item.bytes)?.bytes ?? payload;
   const fields = readFields(config);
   const pct = fields.find((item) => item.field === 1 && item.float != null)?.float;
+  const startMsg = fields.find((item) => item.field === 4 && item.bytes)?.bytes;
+  const start = startMsg ? timestampSeconds(startMsg) : undefined;
   const endMsg = fields.find((item) => item.field === 5 && item.bytes)?.bytes;
   const end = endMsg ? timestampSeconds(endMsg) : undefined;
   const hasPeriod = fields.some((item) => item.field === 4 || item.field === 5);
@@ -165,6 +174,7 @@ function parseGrokCredits(buf: Buffer): { weekPct: number; weekReset?: string } 
   return {
     weekPct: pct != null && Number.isFinite(pct) ? pct : 0,
     weekReset: end ? new Date(end * 1000).toISOString() : undefined,
+    weekStart: start ? new Date(start * 1000).toISOString() : undefined,
   };
 }
 
@@ -207,10 +217,15 @@ async function grokCreditsConfig(key: string) {
         (typeof period?.end === "string" && period.end) ||
         (typeof config.billingPeriodEnd === "string" && config.billingPeriodEnd) ||
         undefined;
+      const start =
+        (typeof period?.start === "string" && period.start) ||
+        (typeof config.billingPeriodStart === "string" && config.billingPeriodStart) ||
+        undefined;
       if (typeof pct === "number" || end) {
         return {
           weekPct: typeof pct === "number" && Number.isFinite(pct) ? pct : 0,
           weekReset: end,
+          weekStart: start,
         };
       }
     }
@@ -274,11 +289,14 @@ async function chatgptQuota(): Promise<OfficialQuota | undefined> {
         : undefined;
   if (five == null && week == null && resetCredits == null) return undefined;
   const resetAt = typeof secondary?.reset_at === "number" ? secondary.reset_at : undefined;
+  const fiveResetAt = typeof primary?.reset_at === "number" ? primary.reset_at : undefined;
   return {
     name: "ChatGPT 账号",
     fiveHourPct: five,
     weekPct: week,
     weekReset: resetAt ? new Date(resetAt * 1000).toISOString() : undefined,
+    fiveHourReset: fiveResetAt ? new Date(fiveResetAt * 1000).toISOString() : undefined,
+    plan: typeof usage.plan_type === "string" ? usage.plan_type : undefined,
     resetCredits,
   };
 }
@@ -295,6 +313,7 @@ async function grokQuota(): Promise<OfficialQuota | undefined> {
     name: "Grok 账号",
     weekPct: config?.weekPct,
     weekReset: config?.weekReset,
+    weekStart: config?.weekStart,
     resetCredits: resets,
   };
 }
@@ -321,6 +340,7 @@ async function claudeQuota(): Promise<OfficialQuota | undefined> {
     fiveHourPct: five?.pct ?? 0,
     weekPct: week?.pct ?? 0,
     weekReset: week?.reset,
+    fiveHourReset: five?.reset,
   };
 }
 
@@ -349,5 +369,11 @@ export async function fetchOfficialQuota(force = false): Promise<OfficialQuotaMa
     ),
   );
   cache = { at: Date.now(), value };
+  // 真的问过接口才记（走缓存的不算），额度监控靠这份历史算速度。见 quota-history.ts。
+  try {
+    recordQuotaSamples(value);
+  } catch {
+    // 写不进去只是少一个采样点
+  }
   return value;
 }

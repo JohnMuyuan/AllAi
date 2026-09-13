@@ -26,7 +26,7 @@ process.env.ALLAI_DATA_DIR = data;
 
 const realHome = os.homedir;
 os.homedir = () => home;
-const { scanLocalUsage, readRollups } = require(path.join(ROOT, "electron-dist", "usage-scan.js"));
+const { scanLocalUsage, readRollups, writeRollups } = require(path.join(ROOT, "electron-dist", "usage-scan.js"));
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -176,6 +176,60 @@ try {
       all["2026-09-11|Claude Code|claude-opus-5"].input === 7,
     JSON.stringify(all["2026-09-11|Claude Code|claude-opus-5"]),
   );
+
+  // ---- 0.17.0：按小时的账 + 这个会话走不走官方账号（额度监控靠这两样） ----
+  const HOUR = 3_600_000;
+  const recentHour = Math.floor((Date.now() - 3 * HOUR) / HOUR) * HOUR;
+  const RECENT = new Date(recentHour + 60_000).toISOString();
+  const codexOfficial = path.join(home, ".codex", "sessions", "2026", "rollout-official.jsonl");
+  const codexRelay = path.join(home, ".codex", "sessions", "2026", "rollout-relay.jsonl");
+  const codexLines = (provider) => [
+    { type: "session_meta", timestamp: RECENT, payload: { model_provider: provider } },
+    { type: "event_msg", timestamp: RECENT, payload: { type: "thread_settings_applied", thread_settings: { model: "gpt-6-astra" } } },
+    { type: "token_usage_record", timestamp: RECENT, payload: { response_id: "r", usage: { input_tokens: 50, output_tokens: 5 } } },
+  ];
+  write(codexOfficial, codexLines("openai"));
+  write(codexRelay, codexLines("custom"));
+  const claudeRecent = path.join(home, ".claude", "projects", "proj", "s-recent.jsonl");
+  write(claudeRecent, [{ ...claudeLine(1, 2, 3, 4, "req_recent"), timestamp: RECENT }]);
+  // Grok 配了中转地址：它的会话文件里不记走哪个接口，只能按全局配置当成「不是官方」
+  fs.mkdirSync(path.join(home, ".grok"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".grok", "config.toml"), 'base_url = "https://relay.example/v1"\n');
+  const grokRelay = path.join(home, ".grok", "sessions", "enc", "s3", "updates.jsonl");
+  write(grokRelay, [
+    {
+      timestamp: Math.floor(Date.parse(RECENT) / 1000),
+      params: { update: { sessionUpdate: "turn_completed", usage: { inputTokens: 9, outputTokens: 1, modelCalls: 1 } } },
+    },
+  ]);
+  scanLocalUsage();
+  let files = readRollups().files;
+  check(
+    "Codex：session_meta 是 openai 的算官方，custom 的不算",
+    files[codexOfficial]?.official === true && files[codexRelay]?.official === false && files[codexOfficial]?.kind === "codex",
+    JSON.stringify({ o: files[codexOfficial]?.official, r: files[codexRelay]?.official }),
+  );
+  check("Claude：没配中转地址就算官方", files[claudeRecent]?.official === true);
+  check("Grok：config.toml 配了 base_url 就不算官方", files[grokRelay]?.official === false, String(files[grokRelay]?.official));
+  const hourRow = files[claudeRecent]?.hours?.[String(recentHour)]?.["claude-opus-5"];
+  check("按小时记账：落在整点那一格，口径和日账一样", hourRow?.requests === 1 && hourRow?.input === 8, JSON.stringify(files[claudeRecent]?.hours));
+
+  // 老版本的账（没有 v / hours）：最近动过的文件要重读一次补上按小时的账，日账不能翻倍
+  const legacy = readRollups();
+  delete legacy.files[claudeRecent].v;
+  delete legacy.files[claudeRecent].hours;
+  const daysBefore = JSON.stringify(legacy.files[claudeRecent].days);
+  writeRollups(legacy);
+  scanLocalUsage();
+  files = readRollups().files;
+  check(
+    "老账升级：补上按小时的账，日账不翻倍",
+    files[claudeRecent].v === 2 &&
+      files[claudeRecent].hours?.[String(recentHour)]?.["claude-opus-5"]?.requests === 1 &&
+      JSON.stringify(files[claudeRecent].days) === daysBefore,
+    JSON.stringify(files[claudeRecent].days),
+  );
+
 } finally {
   os.homedir = realHome;
   fs.rmSync(home, { recursive: true, force: true });

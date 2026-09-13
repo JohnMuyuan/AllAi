@@ -95,7 +95,8 @@ app.whenReady().then(async () => {
     const title = kids[0], second = kids[1];
     if (!second) return { err: 'one-row' };
     const handoff = [...h.querySelectorAll('button')].find(b => /接续到新对话|Continue in a new chat/.test(b.textContent));
-    const model = second.querySelector('.ui-select');
+    // 只认 ModelSelect 自己的触发按钮（外面包着 div.relative）。工作目录按钮也是 .ui-select，拿泛选择器会量错人。
+    const model = second.querySelector('div.relative > button.ui-select');
     const mid = (el) => Math.round(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2);
     return {
       titleTop: Math.round(title.getBoundingClientRect().top),

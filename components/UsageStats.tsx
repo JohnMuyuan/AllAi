@@ -189,7 +189,8 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
       return events.filter((item) => areas.includes(item.area) && item.at >= start && item.at <= end);
     }
     if (range === "current") {
-      const now = new Date(loadedAt || Date.now());
+      // loadedAt 在读到数据时就有了；没读到时 events 本来就是空的
+      const now = new Date(loadedAt);
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       return events.filter((item) => areas.includes(item.area) && item.at >= start);
     }

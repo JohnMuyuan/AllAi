@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.16.50**，安装包 `dist/AllAi-Setup-0.16.50.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.0**，安装包 `dist/AllAi-Setup-0.17.0.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -57,6 +57,8 @@ node scripts/test-agent-live.cjs          # 动了 electron/live.ts 的判活
 node scripts/test-remote-sessions.cjs      # 动了 electron/remote.ts 的会话生命周期时
 node scripts/test-launch-env.cjs           # 动了 electron/launch.ts 的鉴权环境变量
 node scripts/test-i18n-ui.cjs              # 动了 lib/i18n.ts / lib/theme.ts / Agent 顶栏（要 dev server，见文件头）
+node scripts/test-quota-monitor.cjs        # 动了 lib/quota-monitor.ts / electron/quota-history.ts
+node scripts/test-quota-monitor-ui.cjs     # 动了 components/QuotaMonitor.tsx（要 dev server，见文件头）
 node scripts/test-agent-session.cjs        # 动了换模型 / 交接压缩
 node scripts/test-cli-commands.cjs         # 动了 lib/cli-commands.ts
 ```
@@ -257,6 +259,25 @@ Claude `-p` + `stream-json` 必须带 `--verbose`，否则直接报错。Grok �
 `GetGrokCreditsConfig` 的 protobuf：外层 field 1 是 config；config field 1 的 float 是周已用百分比（0–100，不是点数）；field 4/5 是本周起止。只读重置次数，不要去 redeem。
 
 界面措辞一律「已用」，不要写「剩余额度」。重置次数可以写「重置 N」。
+
+---
+
+## 额度监控（0.17.0）
+
+设置 → 额度监控。官方接口只给「这一刻已用百分比」，本机会话只有 token —— 两边在同一个窗口里对一下，就能算出消耗速度、预计用完时间、整窗额度折合多少 token / 美元。
+
+| 环节 | 位置 | 说明 |
+|------|------|------|
+| 采样 | `electron/quota-history.ts` → `~/.allai/quota-history.json` | `fetchOfficialQuota` 每次真的问过接口（没走缓存）就记一笔；主进程每 5 分钟问一次，不管设置页开没开。没变化的 15 分钟内只记一次，留 45 天。 |
+| 按小时的用量 | `electron/usage-scan.ts` 的 `files[].hours` | 整点时间戳 × 型号，留 40 天。`STATE_VERSION = 2`：老账遇到就重读一次，只重读 40 天内动过的文件。 |
+| 归属 | 同上 `files[].official` / `kind` | Codex 看会话开头 `session_meta.model_provider`（`openai` 才算）；Claude Code / Grok 会话里不记，看全局配置（`~/.claude/settings.json` 的 env、`~/.grok/config.toml` 的 `base_url`），见 `configOfficial`。 |
+| 计算 | `lib/quota-monitor.ts`（纯函数） | 口径写在文件头，见约定 98。 |
+| 接口 | `app/api/quota-monitor` | 本机官方会话 + AllAi 官方登录聊天（usage.json 里 source 是「Claude 账号」这种；那些 CLI 会话在 `~/.allai/*-chat`，扫描器本来就跳过，不会重复）。没采到过额度的账号不返回。 |
+| 界面 | `components/QuotaMonitor.tsx` | 手写 SVG。配色 `--series-*`（模型占比，按型号第一次出现的先后排座次，不按排名）/ `--status-*`（只表示好坏，配图标和文字）在 `app/globals.css`。 |
+
+额度接口的原始返回（结构，2026-09 实测）：Claude `five_hour` / `seven_day` 各有整数 `utilization` + `resets_at`，没有按型号拆的窗口（`seven_day_opus` 等都是 null）；ChatGPT `rate_limit.primary_window`（5 小时）/ `secondary_window`（7 天）各有 `used_percent`、`reset_at`（秒）、`limit_window_seconds`，外加 `plan_type`；Grok `config.currentPeriod.start/end` 直接给出周窗口起止。
+
+回归：`node scripts/test-quota-monitor.cjs`（计算 + 采样器）、`node scripts/test-usage-scan.cjs`（按小时 + 归属 + 老账升级）、`scripts/test-quota-monitor-ui.cjs`（界面，要 dev server，见文件头）。
 
 ---
 
@@ -552,7 +573,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 87. **Claude Code 会把一次 API 响应的多个内容块拆成多行写进会话文件，每行都带同一份 usage。** 按行累加就把同一次请求算好几遍（实测 11003 行里 5009 行是这种，虚高 1.83 倍）。这些重复行**永远相邻、usage 完全相同**，所以记住上一条的 `requestId` 跳过就够了（`FileState.lastId`，要跨增量批次保留，一组重复行可能正好被读取边界切开）。Codex（`response_id`）和 Grok（`prompt_id`）实测没有重复。
 88. **界面文案走 `lib/i18n.ts`，用中文原文当 key。** `const t = useT()` 之后 `t("新对话")`、`t("共 {n} 段", { n })`；没翻的自动回落中文，不会出现空白或 `missing.key`。原文改了就是新 key，漏翻会直接看见。`LangProvider` 挂在 `app/page.tsx` 最外层（标题栏和确认框也能翻）。OptionSelect / ConfirmDialog 会自己翻选项和按钮。手机网页同样包 `LangProvider`，跟系统语言或 `allai-lang`。**下面这些绝对不能进词典，翻了直接弄坏功能**：协议标记（`ANSWER_MARK` / `HANDOFF_MARK`，桌面和手机要逐字一致）、斜杠指令的中文别名（`lib/cli-commands.ts` 里 `压缩`/`清空` 是**输入**不是显示）、存进 db.json 的枚举值、发给模型的提示词。语言存 localStorage（`allai-lang`）不进 prefs —— 首屏那段防闪烁脚本要在读 db 之前就用上。回归：`scripts/test-i18n-ui.cjs`（12 项，含主题和顶栏换行）。
 89. **深浅色存的是「模式」不是「颜色」。** `allai-theme` 只会是 `light` / `dark` / `system`；选了 `system` 之后用户在 Windows 里改深浅色要**当场**跟着变，所以真正的深浅每次现算（`resolveTheme`）并订阅 `prefers-color-scheme`。存最终颜色就做不到这一点。老版本只存 light / dark，`readThemeMode` 照旧认。
-90. **跑回归时给 dev server 带上 `ALLAI_NO_SUPPLIER_SCAN=1`。** AllAi 每次启动都会扫本机 CLI 配置、把真实中转站和 Key 导进 `db.json`（对用户是省事）—— 拿临时 `ALLAI_DATA_DIR` 跑测试时，这个目录里就白白躺一份真凭据。开关在 `lib/store.ts`。测完把目录删掉。
+90. **跑回归时给 dev server 带上 `ALLAI_NO_SUPPLIER_SCAN=1`。** AllAi 每次启动都会扫本机 CLI 配置、把真实中转站和 Key 导进 `db.json`（对用户是省事）—— 拿临时 `ALLAI_DATA_DIR` 跑测试时，这个目录里就白白躺一份真凭据。开关在 `lib/scan-suppliers.ts` 的 `collectSuppliers`（启动时导入和界面调的 `POST /api/providers/scan` 都走它；0.16.38 只挡了启动那条，0.17.0 补上）。测完把目录删掉。
 91. **凡是 `await desktop.xxx()`（IPC），都要接住异常。** preload 里是 `ipcRenderer.invoke`，终端宿主没起来、宿主中途掉线、invoke 超时都会 **reject**，不是返回 `{ok:false}`。0.16.41 修的两处卡死都是漏了这一手，而且位置很阴：
     - 官方登录聊天的 `await desktop.officialChat()` 在 HTTP 那条 `try/finally` **外面**（`official` 分支提前 `return`），一抛就跳过 `finally`，`streamingRef.current` 永远是 true —— 界面一直转圈，之后每次发送都被它挡掉。
     - `sendAgent` 的 `firePrompt()` 干脆没有兜底，`agentStreaming` / `markRunning(true)` 都收不回来，而 `sendAgent` 开头那句 `|| agentStreaming` 会让**这条工作**再也发不出消息。
@@ -573,6 +594,8 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
    预设模板（`lib/templates.ts`）的名称在**应用模板的那一刻**按当前语言写进表单 ——
    那是存进 db 的用户数据，之后就不再跟着界面语言变。
 97. **界面上拼出来的中文要先拆成「模板 + 变量」再翻。** `` `${limit.note}（估算）` `` 这种写法
+98. **额度监控的速度取「最近」和「整个窗口平均」里较快的那个，折算整窗额度要求已用 >= 2%。** 只看最近：睡一觉回来最近 6 小时是 0，会说「永远用不完」；只看平均又追不上突然猛用。Claude 的 utilization 是整数，1% 时折算误差能放大几十倍。窗口里百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算，别拿上周的 95% 报警。改口径先改 `scripts/test-quota-monitor.cjs`。
+99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
    拼出来的是个全新字符串，词典里永远对不上。改成 `t("{note}（估算）", { note: t(limit.note) })`
    这样两层：模板能翻，里面那段（数据表里的中文）也单独翻一次。
    `lib/context-window.ts` 的 `compactNotice` 就是照这个拆的（`COMPACT_NOTICE` + `compactNoticeVars`），
@@ -753,11 +776,13 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.16.50**，安装包 `dist/AllAi-Setup-0.16.50.exe`，桌面快捷方式已更新。
+当前发版 **0.17.0**，安装包 `dist/AllAi-Setup-0.17.0.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
-**最近刚做完（0.16.48）：** 模型折叠含添加框和思考档位；AllAi 发消息会打进用户已开的 Claude/Grok 终端（`electron/cli-inject.ts`，pid 来自登记表，不扫进程名）。Codex 没有 pid 登记，仍走 AllAi 自己 spawn。
+**最近刚做完（0.17.0）：** 设置里新增「额度监控」专区：官方额度每 5 分钟采样，算消耗速度、预计用完时间、整周额度折合多少 token / 美元、每小时消耗和型号占比。本机 CLI 用量扫描顺带改成按小时记账、按会话判断走不走官方账号。见「额度监控」一节和约定 98、99。
+
+**更早（0.16.48）：** 模型折叠含添加框和思考档位；AllAi 发消息会打进用户已开的 Claude/Grok 终端（`electron/cli-inject.ts`，pid 来自登记表，不扫进程名）。Codex 没有 pid 登记，仍走 AllAi 自己 spawn。
 
 **更早（0.16.47）：** 预设图标（`public/brand/presets/` + `lib/preset-icons.ts` 打分匹配）；思考过程不再自动合上；主界面去掉重复版本号；启动画面跟日夜间；Agent 接口模型列表可折叠。
 

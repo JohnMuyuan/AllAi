@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { estimateCost } from "./model-pricing";
 import { dataDir } from "./paths";
+import type { AccountKind, HourRow } from "./quota-monitor";
 import type { UsageEvent } from "./usage";
 
 /**
@@ -32,7 +33,10 @@ type DayBuckets = Record<string, Record<string, Record<string, Bucket>>>;
 
 type Rollups = {
   version?: number;
-  files?: Record<string, { days?: DayBuckets }>;
+  files?: Record<
+    string,
+    { days?: DayBuckets; hours?: Record<string, Record<string, Bucket>>; kind?: string; official?: boolean }
+  >;
   imports?: Record<string, { at?: number; days?: DayBuckets }>;
 };
 
@@ -162,4 +166,49 @@ export async function rollupSummary(): Promise<RollupSummary> {
       return { name, at: entry.at || 0, ...count(days) };
     }),
   };
+}
+
+const ACCOUNT_OF_KIND: Record<string, AccountKind> = {
+  "claude-code": "claude",
+  codex: "chatgpt",
+  "grok-build": "grok",
+};
+
+export type OfficialHours = Record<AccountKind, { rows: HourRow[]; included: number; excluded: number }>;
+
+/**
+ * 额度监控用：本机 CLI 会话里**走官方账号的**那部分，按小时。
+ * `included` / `excluded` 是算进来 / 因为走中转被排除的会话数，界面上照实说。
+ */
+export async function officialHourRows(since: number): Promise<OfficialHours> {
+  const rollups = await read();
+  const out: OfficialHours = {
+    claude: { rows: [], included: 0, excluded: 0 },
+    chatgpt: { rows: [], included: 0, excluded: 0 },
+    grok: { rows: [], included: 0, excluded: 0 },
+  };
+  for (const file of Object.values(rollups.files ?? {})) {
+    const account = file.kind ? ACCOUNT_OF_KIND[file.kind] : undefined;
+    if (!account) continue;
+    if (file.official !== true) {
+      if (file.official === false) out[account].excluded += 1;
+      continue;
+    }
+    out[account].included += 1;
+    for (const [key, byModel] of Object.entries(file.hours ?? {})) {
+      const hour = Number(key);
+      if (!Number.isFinite(hour) || hour + 3_600_000 <= since) continue;
+      for (const [model, bucket] of Object.entries(byModel)) {
+        out[account].rows.push({
+          hour,
+          model,
+          // 口径同统计页：input 已含缓存读写
+          tokens: (bucket.input || 0) + (bucket.output || 0),
+          costUsd: bucket.costUsd || estimateCost(model, bucket),
+          requests: bucket.requests || 0,
+        });
+      }
+    }
+  }
+  return out;
 }

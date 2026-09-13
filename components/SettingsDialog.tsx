@@ -26,6 +26,7 @@ import { GeneralSettings } from "./GeneralSettings";
 import { ImagineSettings } from "./ImagineSettings";
 import { SkillsPanel } from "./SkillsPanel";
 import { UsageStats } from "./UsageStats";
+import { QuotaMonitor } from "./QuotaMonitor";
 import { RemoteSettings } from "./RemoteSettings";
 import { AboutSettings } from "./AboutSettings";
 
@@ -38,7 +39,7 @@ const MODEL_TABS: string[] = ["chat", "agents", "imagine"];
 type Props = {
   providers: PublicProvider[];
   agents?: PublicAgent[];
-  initialTab?: "chat" | "agents" | "imagine" | "skills" | "usage" | "general" | "remote" | "about";
+  initialTab?: "chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" | "remote" | "about";
   prefs?: AppPrefs;
   skills?: ManagedSkill[];
   onPrefs?: (patch: Partial<AppPrefs>) => void;
@@ -102,7 +103,7 @@ export function SettingsDialog({
 }: Props) {
   const t = useT();
   const confirm = useConfirm();
-  const [tab, setTab] = useState<"chat" | "agents" | "imagine" | "skills" | "usage" | "general" | "remote" | "about">(initialTab);
+  const [tab, setTab] = useState<"chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" | "remote" | "about">(initialTab);
   const [agentId, setAgentId] = useState(initialAgentId || agents[0]?.id || "");
   const selectedAgent =
     agentId === GLOBAL_ID ? null : agents.find((item) => item.id === agentId) ?? agents[0] ?? null;
@@ -377,7 +378,7 @@ export function SettingsDialog({
         </div>
 
         <div className="border-b border-line px-5 py-2">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
+          <div className="grid grid-cols-4 gap-1 md:grid-cols-7">
             {(
               [
                 // 通用放第一个；聊天模型 / Agent 接口 / 生图视频都是「接模型」，收进一个入口再分二级。
@@ -385,6 +386,7 @@ export function SettingsDialog({
                 ["models", t("模型与接口")],
                 ["skills", "Skills"],
                 ["usage", t("使用统计")],
+                ["quota", t("额度监控")],
                 ["remote", t("远程")],
                 ["about", t("关于")],
               ] as const
@@ -438,6 +440,8 @@ export function SettingsDialog({
         />
         ) : tab === "remote" ? (
           <RemoteSettings onToast={onToast} />
+        ) : tab === "quota" ? (
+          <QuotaMonitor onToast={onToast} />
         ) : tab === "usage" ? (
           <UsageStats onToast={onToast} providers={providers} prefs={prefs} />
         ) : tab === "imagine" && prefs && onPrefs ? (

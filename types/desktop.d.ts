@@ -112,6 +112,9 @@ export type OfficialQuota = {
   weekReset?: string;
   credits?: number;
   resetCredits?: number;
+  fiveHourReset?: string;
+  weekStart?: string;
+  plan?: string;
 };
 
 export type OfficialQuotaMap = {

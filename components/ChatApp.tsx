@@ -260,7 +260,7 @@ export function ChatApp() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<
-    "chat" | "agents" | "imagine" | "skills" | "usage" | "general" | "remote" | "about"
+    "chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" | "remote" | "about"
   >("chat");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -427,7 +427,7 @@ export function ChatApp() {
   const [officialBusy, setOfficialBusy] = useState<OfficialChatKind | null>(null);
 
   function openSettings(
-    tab: "chat" | "agents" | "imagine" | "skills" | "usage" | "general" = "chat",
+    tab: "chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" = "chat",
     agentId?: string,
   ) {
     setSettingsTab(tab);

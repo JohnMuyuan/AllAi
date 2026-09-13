@@ -419,6 +419,13 @@ if (!gotLock) {
         }
       }, 5 * 60_000).unref?.();
     }, 8000).unref?.();
+    // 官方额度：每 5 分钟问一次，fetchOfficialQuota 里顺手记进 quota-history.json。
+    // 「额度监控」算速度、预测用完时间都靠这份历史 —— 不管设置页开没开都得记。
+    setTimeout(() => {
+      const sample = () => void fetchOfficialQuota().catch(() => undefined);
+      sample();
+      setInterval(sample, 5 * 60_000).unref?.();
+    }, 15_000).unref?.();
     // 开着「启动时自动更新」就在后台把本机 CLI 都更新一遍（等 20 秒，别和启动抢资源）。
     initCliUpdate((state) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("cli:update-state", state);

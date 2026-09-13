@@ -62,7 +62,29 @@ type FileState = {
    * 跨批次也要记住：一组重复行可能正好被增量读的边界切开。
    */
   lastId?: string;
+  /** 哪家 CLI 的会话。额度监控按它把用量对到官方账号上。 */
+  kind?: Kind;
+  /**
+   * 这个会话是不是走官方登录账号（而不是 API Key / 中转站）。额度监控只算这种。
+   * Codex 看文件开头 session_meta 的 model_provider（每个会话自己记了，准）；
+   * Claude Code / Grok 的会话文件里没记，只能看它们的全局配置，见 configOfficial。
+   * undefined = 还没判断出来（比如 Codex 还没读到 session_meta）。
+   */
+  official?: boolean;
+  /** 按小时的账：`hours[整点时间戳][型号]`。只留 HOURS_KEEP_MS，额度监控用。 */
+  hours?: Record<string, Record<string, UsageBucket>>;
+  /** 账本结构版本，见 STATE_VERSION。 */
+  v?: number;
 };
+
+/**
+ * 0.17.0 起每个文件多记了 hours / official / kind。老账没有这些，遇到就重读一次 ——
+ * 只重读最近 HOURS_KEEP_MS 里动过的文件（更早的用不上按小时的账，日账也是对的）。
+ */
+const STATE_VERSION = 2;
+/** 按小时的账只留这么久：额度监控最多看一周，多留点余量。 */
+const HOURS_KEEP_MS = 40 * 86_400_000;
+const HOUR_MS = 3_600_000;
 
 export type UsageRollups = {
   version: 1;
@@ -115,6 +137,51 @@ function bucket(days: DayBuckets, day: string, source: string, model: string): U
     costUsd: 0,
     requests: 0,
   });
+}
+
+function emptyBucket(): UsageBucket {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, costUsd: 0, requests: 0 };
+}
+
+function addUsage(into: UsageBucket, usage: UsageBucket) {
+  into.input += usage.input;
+  into.output += usage.output;
+  into.cacheRead += usage.cacheRead;
+  into.cacheWrite += usage.cacheWrite;
+  into.reasoning += usage.reasoning;
+  into.costUsd += usage.costUsd;
+  into.requests += usage.requests;
+}
+
+/**
+ * 终端里的 CLI 走官方账号还是中转站，看它自己的全局配置：
+ * - Claude Code：`~/.claude/settings.json` 的 env 里配了中转地址或 Key 就不是官方；
+ * - Grok：`~/.grok/config.toml` 里有生效的 base_url 就不是官方。
+ * 局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，
+ * 会话文件看不出来，会跟着全局配置走。Codex 不看这个 —— 它每个会话自己记了 model_provider。
+ */
+function configOfficial(): Record<Kind, boolean | undefined> {
+  const home = os.homedir();
+  let claude = true;
+  try {
+    const settings = JSON.parse(fs.readFileSync(path.join(home, ".claude", "settings.json"), "utf8")) as {
+      env?: Record<string, unknown>;
+    };
+    const env = settings.env ?? {};
+    claude = !["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"].some(
+      (key) => typeof env[key] === "string" && String(env[key]).trim(),
+    );
+  } catch {
+    // 没有 settings.json 就是默认的官方登录
+  }
+  let grok = true;
+  try {
+    const toml = fs.readFileSync(path.join(home, ".grok", "config.toml"), "utf8");
+    grok = !/^\s*base_url\s*=\s*["'][^"']+["']/m.test(toml);
+  } catch {
+    // 没有 config.toml 同上
+  }
+  return { "claude-code": claude, codex: undefined, "grok-build": grok };
 }
 
 function dayOf(ms: number) {
@@ -260,18 +327,34 @@ function grokRows(obj: Record<string, unknown>): Row[] {
 /** 一次最多读多少字节，免得单个超大文件把内存吃满。剩下的下一轮接着读。 */
 const MAX_CHUNK = 32 * 1024 * 1024;
 
-function scanFile(file: string, kind: Kind, state: FileState) {
+function scanFile(file: string, kind: Kind, state: FileState, official: Record<Kind, boolean | undefined>) {
   let stat: fs.Stats;
   try {
     stat = fs.statSync(file);
   } catch {
     return false;
   }
+  if (state.v !== STATE_VERSION) {
+    state.v = STATE_VERSION;
+    if (!state.offset || stat.mtimeMs >= Date.now() - HOURS_KEEP_MS) {
+      state.offset = 0;
+      state.days = {};
+      state.hours = {};
+      state.model = undefined;
+      state.lastId = undefined;
+      state.official = undefined;
+    }
+  }
+  state.kind = kind;
+  if (state.official === undefined && kind !== "codex") state.official = official[kind];
   // 变小了 = 被重写/截断过，之前记的账对不上了：整份清掉重读。
   if (stat.size < state.offset) {
     state.offset = 0;
     state.days = {};
+    state.hours = {};
     state.model = undefined;
+    state.lastId = undefined;
+    if (kind === "codex") state.official = undefined;
   }
   if (stat.size === state.offset) {
     state.size = stat.size;
@@ -311,6 +394,10 @@ function scanFile(file: string, kind: Kind, state: FileState) {
     if (kind === "codex") {
       // 型号写在这一轮开头的设置里，后面的 usage 行自己不带。
       const payload = obj.payload as Record<string, unknown> | undefined;
+      // 会话开头那条自己写了走哪家：openai = 官方 ChatGPT 账号，custom 之类 = 中转站。
+      if (obj.type === "session_meta" && typeof payload?.model_provider === "string") {
+        state.official = payload.model_provider === "openai";
+      }
       if (payload?.type === "thread_settings_applied") {
         const settings = payload.thread_settings as Record<string, unknown> | undefined;
         const model = String(settings?.model || "");
@@ -328,14 +415,11 @@ function scanFile(file: string, kind: Kind, state: FileState) {
         if (row.id && row.id === state.lastId) continue;
         state.lastId = row.id;
       }
-      const into = bucket(state.days, dayOf(row.at), source, model);
-      into.input += row.usage.input;
-      into.output += row.usage.output;
-      into.cacheRead += row.usage.cacheRead;
-      into.cacheWrite += row.usage.cacheWrite;
-      into.reasoning += row.usage.reasoning;
-      into.costUsd += row.usage.costUsd;
-      into.requests += row.usage.requests;
+      addUsage(bucket(state.days, dayOf(row.at), source, model), row.usage);
+      if (row.at >= Date.now() - HOURS_KEEP_MS) {
+        const byModel = ((state.hours ??= {})[String(Math.floor(row.at / HOUR_MS) * HOUR_MS)] ??= {});
+        addUsage((byModel[model] ??= emptyBucket()), row.usage);
+      }
       touched = true;
     }
   }
@@ -359,6 +443,7 @@ export function scanLocalUsage(): { files: number; changed: number; skipped: boo
   try {
     const rollups = readRollups();
     const alive = new Set<string>();
+    const official = configOfficial();
     let changed = 0;
     let files = 0;
     for (const { kind, dir } of roots()) {
@@ -368,13 +453,17 @@ export function scanLocalUsage(): { files: number; changed: number; skipped: boo
         const state = (rollups.files[file] ??= { size: 0, mtimeMs: 0, offset: 0, days: {} });
         // 大小和改动时间都没变就跳过（新文件的 size/mtime 记的是 0，不会误判成没变）。
         const stat = safeStat(file);
-        if (stat && stat.size === state.size && stat.mtimeMs === state.mtimeMs) continue;
-        if (scanFile(file, kind, state)) changed += 1;
+        if (stat && state.v === STATE_VERSION && stat.size === state.size && stat.mtimeMs === state.mtimeMs) continue;
+        if (scanFile(file, kind, state, official)) changed += 1;
       }
     }
     // CLI 自己清掉的老会话：账留着（那些 token 确实花过），只是不会再更新。
     for (const key of Object.keys(rollups.files)) {
       if (!alive.has(key) && !Object.keys(rollups.files[key].days).length) delete rollups.files[key];
+    }
+    const cutoff = Date.now() - HOURS_KEEP_MS;
+    for (const state of Object.values(rollups.files)) {
+      for (const key of Object.keys(state.hours ?? {})) if (Number(key) < cutoff) delete state.hours![key];
     }
     writeRollups(rollups);
     return { files, changed, skipped: false };

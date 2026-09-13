@@ -102,10 +102,8 @@ async function seed(db: Database) {
     db.agents = relabeled;
     changed = true;
   }
-  // 启动时扫本机 CLI 配置，把中转站和 Key 导进来 —— 对用户是省事，
-  // 但跑回归时会让隔离数据目录悄悄多出一份真 Key。测试脚本设
-  // ALLAI_NO_SUPPLIER_SCAN=1 关掉它。
-  if (!suppliersScanned && process.env.ALLAI_NO_SUPPLIER_SCAN !== "1") {
+  // 启动时扫本机 CLI 配置，把中转站和 Key 导进来。跑回归时的开关在 collectSuppliers 里。
+  if (!suppliersScanned) {
     suppliersScanned = true;
     try {
       const scanned = await collectSuppliers(db.agents);
