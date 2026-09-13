@@ -55,7 +55,7 @@ export function emptyTotals(): UsageTotals {
 }
 
 export function addTotals(into: UsageTotals, event: UsageEvent) {
-  into.input += event.input;
+  into.input += fullInput(event);
   into.output += event.output;
   into.cacheRead += event.cacheRead;
   into.cacheWrite += event.cacheWrite;
@@ -63,9 +63,20 @@ export function addTotals(into: UsageTotals, event: UsageEvent) {
   into.costUsd += event.costUsd;
   into.requests += event.requests;
   into.images += event.images;
-  // 缓存读的是输入的一部分，不重复计；总量按 input + output 算。
-  into.tokens += event.input + event.output;
+  // 缓存读的是输入的一部分，不重复计；总量按完整输入 + 输出算。
+  into.tokens += fullInput(event) + event.output;
   return into;
+}
+
+/** 统一输入口径。旧记录里的 Anthropic input 不含缓存读写，需要在读取时补回。 */
+export function fullInput(
+  event: Pick<UsageEvent, "input" | "cacheRead" | "cacheWrite" | "contextTokens">,
+) {
+  // 新记录保存了已经统一过的窗口输入量，优先使用它，避免再次补加缓存明细。
+  if (event.contextTokens && event.contextTokens > event.input) return event.contextTokens;
+  return event.cacheRead + event.cacheWrite > event.input
+    ? event.input + event.cacheRead + event.cacheWrite
+    : event.input;
 }
 
 function num(value: unknown): number {
@@ -94,10 +105,17 @@ export function normalizeUsage(raw: unknown): {
   const cacheWrite = num(u.cache_creation_input_tokens) || num(u.cache_write_input_tokens);
   const reasoning = num(u.reasoning_output_tokens) || num(outDetails.reasoning_tokens);
   const input = num(u.input_tokens) || num(u.prompt_tokens);
+  const anthropicWire = u.cache_read_input_tokens !== undefined;
   const output = num(u.output_tokens) || num(u.completion_tokens);
 
   if (!input && !output && !cacheRead && !cacheWrite && !reasoning) return null;
-  return { input, output, cacheRead, cacheWrite, reasoning };
+  return {
+    input: anthropicWire ? input + cacheRead + cacheWrite : input,
+    output,
+    cacheRead,
+    cacheWrite,
+    reasoning,
+  };
 }
 
 /**
@@ -113,7 +131,7 @@ export function windowUsage(events: UsageEvent[], source: string, now: number) {
   const out = { fiveHour: 0, week: 0, requests: 0, costUsd: 0 };
   for (const event of events) {
     if (event.source !== source) continue;
-    const tokens = event.input + event.output;
+    const tokens = fullInput(event) + event.output;
     if (event.at >= weekFrom) {
       out.week += tokens;
       out.requests += event.requests;
@@ -129,18 +147,12 @@ export function conversationUsage(events: UsageEvent[], conversationId: string) 
   const out = { input: 0, output: 0, cacheRead: 0, prompt: 0, tokens: 0, requests: 0, costUsd: 0 };
   for (const event of events) {
     if (event.conversationId !== conversationId) continue;
-    out.input += event.input;
+    const input = fullInput(event);
+    out.input += input;
     out.output += event.output;
     out.cacheRead += event.cacheRead;
-    /*
-     * 缓存命中率的分母是「这一轮送进模型的全部输入」。Anthropic 口径（Claude）的 input 不含缓存读写，
-     * 要加回去；OpenAI / Grok 的 input 已经含了。Anthropic 会报缓存写入、缓存读常比 input 大，据此区分。
-     */
-    out.prompt +=
-      event.cacheWrite > 0 || event.cacheRead > event.input
-        ? event.input + event.cacheRead + event.cacheWrite
-        : event.input;
-    out.tokens += event.input + event.output;
+    out.prompt += input;
+    out.tokens += input + event.output;
     out.requests += event.requests;
     out.costUsd += event.costUsd;
   }
@@ -170,9 +182,7 @@ export function liveContextTokens(events: UsageEvent[], conversationId: string):
      */
     latest =
       event.contextTokens ||
-      (event.cacheRead > event.input
-        ? event.input + event.cacheRead + event.cacheWrite
-        : event.input) ||
+      fullInput(event) ||
       0;
   }
   return latest;

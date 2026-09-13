@@ -8,7 +8,7 @@ import { UsageHeatmap } from "./UsageHeatmap";
 import { getDesktop } from "@/lib/desktop";
 import { formatCount, formatCountCN } from "@/lib/format-count";
 import { OFFICIAL_CHATS } from "@/lib/official-chat";
-import { addTotals, emptyTotals, windowUsage, type UsageArea, type UsageEvent } from "@/lib/usage";
+import { addTotals, emptyTotals, fullInput, windowUsage, type UsageArea, type UsageEvent } from "@/lib/usage";
 import type { CcSwitchPreview, OfficialQuotaMap } from "@/types/desktop";
 import type { RollupSummary } from "@/lib/usage-rollups";
 import type { AppPrefs, PublicProvider } from "@/lib/types";
@@ -252,7 +252,7 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
     for (const event of filtered) {
       const key = dayKey(event.at);
       const row = days.get(key) ?? { chat: 0, agent: 0, studio: 0 };
-      row[event.area] += event.input + event.output;
+      row[event.area] += fullInput(event) + event.output;
       days.set(key, row);
     }
     const labels = [...days.keys()].sort();
@@ -280,7 +280,7 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
         t(AREA_LABEL[e.area]),
         `"${e.source.replace(/"/g, '""')}"`,
         `"${e.modelId.replace(/"/g, '""')}"`,
-        e.input,
+        fullInput(e),
         e.output,
         e.cacheRead,
         e.cacheWrite,
