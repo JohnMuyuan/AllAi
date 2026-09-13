@@ -3,18 +3,22 @@
 import { Globe, LogIn, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { kindInfo } from "@/lib/agents";
+import { providerIconKey, type BrandIcons } from "@/lib/brand";
 import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
 import { officialModelsNeedRefresh, syncAgentEndpointModels } from "@/lib/sync-agent-models";
 import type { AgentAuthMode, AgentKind, PublicAgent, PublicEndpoint } from "@/lib/types";
 import type { CliAuthKind, CliAuthStatus } from "@/types/desktop";
 import { useT } from "./I18n";
+import { ProviderIconField } from "./ProviderIconField";
 
 type Props = {
   agent: PublicAgent;
   onChanged: () => Promise<unknown>;
   onLogin?: (agentId: string) => void;
   onToast?: (text: string) => void;
+  icons?: BrandIcons;
+  onIcons?: (icons: BrandIcons) => void;
 };
 
 function isCliAuthKind(kind: AgentKind): kind is CliAuthKind {
@@ -41,7 +45,7 @@ function draftsFrom(agent: PublicAgent): EndpointDraft[] {
   return list.map((item) => ({ ...item, apiKey: "" }));
 }
 
-export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast }: Props) {
+export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons = {}, onIcons }: Props) {
   const t = useT();
   const info = kindInfo(agent.kind);
   const [name, setName] = useState(agent.name);
@@ -54,6 +58,7 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast }: Props
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
+  const [freshIds, setFreshIds] = useState<Record<string, true>>({});
   const [authStatus, setAuthStatus] = useState<CliAuthStatus | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const officialSyncTried = useRef(false);
@@ -96,6 +101,16 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast }: Props
     };
     setEndpoints((current) => [...current, draft]);
     setActiveId(draft.id);
+    setFreshIds((current) => ({ ...current, [draft.id]: true }));
+  }
+
+  function patchEndpointIcon(id: string, icon: string) {
+    if (!onIcons) return;
+    const next = { ...icons };
+    const key = providerIconKey(id);
+    if (icon) next[key] = icon;
+    else delete next[key];
+    onIcons(next);
   }
 
   function removeEndpoint(id: string) {
@@ -471,6 +486,13 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast }: Props
                       }
                       placeholder={info.baseUrlPlaceholder}
                       className="w-full rounded-xl border border-line bg-elevated px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+                    />
+                    <ProviderIconField
+                      icon={icons[providerIconKey(item.id)] || ""}
+                      onIcon={(icon) => patchEndpointIcon(item.id, icon)}
+                      autoSource={item.baseUrl}
+                      auto={Boolean(freshIds[item.id])}
+                      onToast={onToast}
                     />
                   </div>
                 ) : null}

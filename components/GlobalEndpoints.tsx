@@ -3,7 +3,9 @@
 import { Globe, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useConfirm } from "./ConfirmDialog";
+import { providerIconKey, type BrandIcons } from "@/lib/brand";
 import { useT } from "./I18n";
+import { ProviderIconField } from "./ProviderIconField";
 import type { PublicEndpoint } from "@/lib/types";
 
 /**
@@ -19,9 +21,13 @@ type Draft = PublicEndpoint & { apiKey: string };
 export function GlobalEndpointsPanel({
   onChanged,
   onToast,
+  icons = {},
+  onIcons,
 }: {
   onChanged: () => Promise<unknown> | void;
   onToast?: (text: string) => void;
+  icons?: BrandIcons;
+  onIcons?: (icons: BrandIcons) => void;
 }) {
   const t = useT();
   const confirm = useConfirm();
@@ -31,6 +37,7 @@ export function GlobalEndpointsPanel({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
+  const [freshIds, setFreshIds] = useState<Record<string, true>>({});
 
   useEffect(() => {
     void fetch("/api/agent-endpoints")
@@ -45,10 +52,11 @@ export function GlobalEndpointsPanel({
   }
 
   function add() {
+    const id = crypto.randomUUID();
     setDrafts((current) => [
       ...current,
       {
-        id: crypto.randomUUID(),
+        id,
         label: t("全局接口 {n}", { n: current.length + 1 }),
         mode: "api",
         apiKey: "",
@@ -59,6 +67,16 @@ export function GlobalEndpointsPanel({
         apiKeyMasked: "",
       },
     ]);
+    setFreshIds((current) => ({ ...current, [id]: true }));
+  }
+
+  function patchIcon(id: string, icon: string) {
+    if (!onIcons) return;
+    const next = { ...icons };
+    const key = providerIconKey(id);
+    if (icon) next[key] = icon;
+    else delete next[key];
+    onIcons(next);
   }
 
   async function remove(id: string) {
@@ -196,6 +214,13 @@ export function GlobalEndpointsPanel({
                   onChange={(event) => update(item.id, { baseUrl: event.target.value })}
                   placeholder="https://your-gateway/v1"
                   className="w-full rounded-xl border border-line bg-elevated px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+                />
+                <ProviderIconField
+                  icon={icons[providerIconKey(item.id)] || ""}
+                  onIcon={(icon) => patchIcon(item.id, icon)}
+                  autoSource={item.baseUrl}
+                  auto={Boolean(freshIds[item.id])}
+                  onToast={onToast}
                 />
               </div>
               <div className="mt-2 space-y-2">

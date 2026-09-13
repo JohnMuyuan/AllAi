@@ -502,6 +502,10 @@ const EN: Record<string, string> = {
   "上限 token": "Limit (tokens)",
 
   /* 图标 */
+  "图标": "Icon",
+  "正在抓取图标…": "Fetching icon…",
+  "填接口地址后会自动抓网站图标，也可以自己上传或填网址。":
+    "The site icon is fetched from the endpoint URL. You can also upload an image or paste a link.",
   "抓不到图标": "Couldn't fetch the icon",
   "图标已保存": "Icon saved",
   "图标不能超过 360KB": "Icon must be under 360KB",

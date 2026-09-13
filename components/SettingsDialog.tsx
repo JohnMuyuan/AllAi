@@ -1,7 +1,7 @@
 "use client";
 
 import { LogIn, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   officialSpecForProvider,
   OFFICIAL_CHATS,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/official-chat";
 import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
+import { providerIconKey } from "@/lib/brand";
 import { PROVIDER_TEMPLATES } from "@/lib/templates";
 import { APP_VERSION } from "@/lib/version";
 import type { AppPrefs, ManagedSkill, ModelRef, ProviderAuth, PublicAgent, PublicProvider } from "@/lib/types";
@@ -20,6 +21,7 @@ import { useT } from "./I18n";
 import { AgentSettingsPanel } from "./AgentSettingsDialog";
 import { GlobalEndpointsPanel } from "./GlobalEndpoints";
 import { ModelIcon } from "./ModelIcon";
+import { ProviderIconField } from "./ProviderIconField";
 import { GeneralSettings } from "./GeneralSettings";
 import { ImagineSettings } from "./ImagineSettings";
 import { SkillsPanel } from "./SkillsPanel";
@@ -122,6 +124,12 @@ export function SettingsDialog({
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  /** 新服务还没有 id，抓到的图标先搁这儿，保存之后再写进 prefs。 */
+  const [iconDraft, setIconDraft] = useState("");
+  const selectedIdRef = useRef(selectedId);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   function applyTemplate(name: string) {
     const template = PROVIDER_TEMPLATES.find((item) => item.name === name);
@@ -152,6 +160,16 @@ export function SettingsDialog({
     });
     setError("");
     setNotice("");
+    setIconDraft("");
+  }
+
+  function patchProviderIcon(id: string, icon: string) {
+    if (!onPrefs) return;
+    const next = { ...(prefs?.brandIcons ?? {}) };
+    const key = providerIconKey(id);
+    if (icon) next[key] = icon;
+    else delete next[key];
+    onPrefs({ brandIcons: next });
   }
 
   function selectProvider(id: string) {
@@ -168,6 +186,7 @@ export function SettingsDialog({
     });
     setError("");
     setNotice("");
+    setIconDraft("");
   }
 
   function addModel() {
@@ -230,6 +249,7 @@ export function SettingsDialog({
       }
       await onChanged();
       if (data.provider) {
+        if (isNew && iconDraft) patchProviderIcon(data.provider.id, iconDraft);
         setSelectedId(data.provider.id);
         setForm({
           name: data.provider.name,
@@ -239,6 +259,7 @@ export function SettingsDialog({
           models: data.provider.models,
           auth: officialSpecForProvider(data.provider)?.auth ?? "api",
         });
+        setIconDraft("");
       }
       setNotice(t("已保存"));
     } catch (err) {
@@ -469,6 +490,8 @@ export function SettingsDialog({
                 <GlobalEndpointsPanel
                   onChanged={onChangedAgents ?? (() => undefined)}
                   onToast={onToast}
+                  icons={prefs?.brandIcons ?? {}}
+                  onIcons={(brandIcons) => onPrefs?.({ brandIcons })}
                 />
               ) : selectedAgent && onChangedAgents ? (
                 <AgentSettingsPanel
@@ -477,6 +500,8 @@ export function SettingsDialog({
                   onChanged={onChangedAgents}
                   onLogin={onLogin}
                   onToast={onToast}
+                  icons={prefs?.brandIcons ?? {}}
+                  onIcons={(brandIcons) => onPrefs?.({ brandIcons })}
                 />
               ) : (
                 <p className="text-sm text-muted">{t("没有可配置的 Agent。")}</p>
@@ -494,6 +519,7 @@ export function SettingsDialog({
                 setForm(emptyForm());
                 setError("");
                 setNotice("");
+                setIconDraft("");
               }}
               className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm ${
                 selectedId === "new" ? "bg-user" : "hover:bg-user/70"
@@ -515,6 +541,7 @@ export function SettingsDialog({
                   <ModelIcon
                     modelId={provider.models[0]?.id || ""}
                     baseUrl={provider.baseUrl}
+                    providerId={provider.id}
                     icons={prefs?.brandIcons ?? {}}
                     className="size-4"
                   />
@@ -669,6 +696,22 @@ export function SettingsDialog({
             </>
             )}
 
+            <ProviderIconField
+              icon={
+                selectedId === "new"
+                  ? iconDraft
+                  : prefs?.brandIcons?.[providerIconKey(selectedId)] || ""
+              }
+              onIcon={(icon) => {
+                const id = selectedIdRef.current;
+                if (id === "new") setIconDraft(icon);
+                else patchProviderIcon(id, icon);
+              }}
+              autoSource={officialForm ? "" : form.baseUrl}
+              auto={!officialForm && selectedId === "new"}
+              onToast={onToast}
+            />
+
             <div className="mb-4">
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-sm font-medium">{t("模型")}</span>
@@ -693,7 +736,12 @@ export function SettingsDialog({
                       <ModelIcon
                         modelId={model.id}
                         baseUrl={form.baseUrl}
-                        icons={prefs?.brandIcons ?? {}}
+                        providerId={selectedId === "new" ? "draft" : selectedId}
+                        icons={
+                          selectedId === "new" && iconDraft
+                            ? { ...(prefs?.brandIcons ?? {}), [providerIconKey("draft")]: iconDraft }
+                            : prefs?.brandIcons ?? {}
+                        }
                         className="size-3.5"
                       />
                       {model.label}
