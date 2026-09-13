@@ -19,6 +19,11 @@
 
 # production
 /build
+/dist
+/electron-dist
+/packaging/node.exe
+/packaging/pty-host
+/packaging/standalone
 
 # misc
 .DS_Store
@@ -32,6 +37,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# local chat data (if ALLAI_DATA_DIR points here)
+/data
 
 # vercel
 .vercel
@@ -39,3 +48,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# remote relay build
+/relay/dist
+/scripts/relay-deploy.env
+
+# local scratch / leftover extract dumps
+.strings.tmp.json
+*.tmp.json
+*.tmp.txt

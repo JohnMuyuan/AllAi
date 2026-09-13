@@ -1,0 +1,33 @@
+{
+  "_comment": "官方登录聊天/Agent 的兜底型号表。放在 electron/ 是因为 electron 的 tsconfig 用 rootDir:'.'，只能引用自己目录下的文件；lib/official-chat.ts 反过来引用这里没问题。改型号只改这一处。",
+  "claude": [
+    { "id": "claude-fable-5-1", "label": "Fable 5.1" },
+    { "id": "claude-opus-5", "label": "Opus 5" },
+    { "id": "claude-sonnet-5", "label": "Sonnet 5" },
+    { "id": "claude-fable-5", "label": "Fable 5" },
+    { "id": "claude-opus-4-8", "label": "Opus 4.8" },
+    { "id": "claude-opus-4-7", "label": "Opus 4.7" },
+    { "id": "claude-sonnet-4-6", "label": "Sonnet 4.6" },
+    { "id": "claude-opus-4-6", "label": "Opus 4.6" },
+    { "id": "claude-haiku-4-5", "label": "Haiku 4.5" },
+    { "id": "claude-sonnet-4-5", "label": "Sonnet 4.5" }
+  ],
+  "grok": [
+    { "id": "grok-4.6", "label": "Grok 4.6" },
+    { "id": "grok-4.5", "label": "Grok 4.5" }
+  ],
+  "chatgpt": [
+    { "id": "gpt-6-astra", "label": "GPT-6 Astra" },
+    { "id": "gpt-5.6-sol", "label": "GPT-5.6 Sol" },
+    { "id": "gpt-5.6-terra", "label": "GPT-5.6 Terra" },
+    { "id": "gpt-5.6-luna", "label": "GPT-5.6 Luna" },
+    { "id": "gpt-5.5", "label": "GPT-5.5" }
+  ],
+  "codex": [
+    { "id": "gpt-6-astra", "label": "GPT-6 Astra" },
+    { "id": "gpt-5.6-sol", "label": "GPT-5.6 Sol" },
+    { "id": "gpt-5.6-terra", "label": "GPT-5.6 Terra" },
+    { "id": "gpt-5.6-luna", "label": "GPT-5.6 Luna" },
+    { "id": "gpt-5.5", "label": "GPT-5.5" }
+  ]
+}

@@ -1,26 +1,118 @@
 {
   "name": "allai",
-  "version": "0.1.0",
+  "version": "0.16.40",
   "private": true,
+  "description": "AllAi desktop — chat and local coding agents",
+  "author": "AllAi",
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "desktop": "npm run electron:compile && concurrently \"next dev --port 3000\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:compile": "tsc -p electron/tsconfig.json && node scripts/copy-electron-assets.cjs",
+    "electron:rebuild": "electron-rebuild -f -w node-pty",
+    "build": "node scripts/check-client-imports.cjs && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "dist": "npm run electron:compile && node scripts/copy-node.cjs && node scripts/check-client-imports.cjs && next build && node scripts/prepare-runtime.cjs && electron-builder && node scripts/check-packaged-runtime.cjs && node scripts/make-shortcut.cjs",
+    "icons": "node scripts/generate-icons.cjs",
+    "check:packaged": "node scripts/check-packaged-runtime.cjs",
+    "remote:build": "node scripts/build-remote.cjs",
+    "remote:deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/relay-push.ps1"
+  },
+  "build": {
+    "appId": "com.allai.desktop",
+    "productName": "AllAi",
+    "directories": {
+      "output": "dist",
+      "buildResources": "packaging"
+    },
+    "afterPack": "scripts/after-pack.cjs",
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "files": [
+      "electron-dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "packaging/standalone",
+        "to": "standalone",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "packaging/node.exe",
+        "to": "node.exe"
+      },
+      {
+        "from": "packaging/pty-host",
+        "to": "pty-host",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "packaging/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "electron/computer.ps1",
+        "to": "computer.ps1"
+      },
+      {
+        "from": "electron-dist/admin-host.js",
+        "to": "admin-host.js"
+      }
+    ],
+    "icon": "packaging/icon.png",
+    "win": {
+      "icon": "packaging/icon.ico",
+      "executableName": "AllAi",
+      "target": [
+        "nsis",
+        "dir"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AllAi",
+      "artifactName": "AllAi-Setup-${version}.exe"
+    }
   },
   "dependencies": {
+    "@types/qrcode": "^1.5.6",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "lucide-react": "^1.41.0",
     "next": "16.3.4",
+    "node-pty": "^1.1.0",
+    "qrcode": "^1.5.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "jsqr": "^1.4.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.1.0",
+    "ws": "^8.21.3"
   }
 }

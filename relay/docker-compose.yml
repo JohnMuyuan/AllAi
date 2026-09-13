@@ -1,0 +1,13 @@
+services:
+  allai-relay:
+    build: .
+    image: allai-relay:latest
+    container_name: allai-relay
+    restart: unless-stopped
+    environment:
+      # 由 deploy.sh 第一次部署时自动生成并写进同目录的 .env
+      RELAY_TOKEN: "${RELAY_TOKEN:?缺少 RELAY_TOKEN，用 bash deploy.sh up 部署会自动生成}"
+    # 默认只监听本机 30778，由 1Panel 的反向代理对外提供 HTTPS。
+    # 反代不在这台机器上时，把 .env 里的 RELAY_BIND 改成 0.0.0.0（并用防火墙限制来源）。
+    ports:
+      - "${RELAY_BIND:-127.0.0.1}:${RELAY_PORT:-30778}:8787"

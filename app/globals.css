@@ -1,26 +1,479 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --canvas: #f4f4f5;
+  --sidebar: #ececee;
+  --elevated: #ffffff;
+  --ink: #18181b;
+  --muted: #3f3f46;
+  --line: #d4d4d8;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --user: #e4e4e7;
+  --danger: #dc2626;
+  --code: #f4f4f5;
+  /* 使用统计的三条曲线：聊天 / Agent / 创作 */
+  --chart-chat: #4f46e5;
+  --chart-agent: #0d9488;
+  --chart-studio: #d97706;
+}
+
+html.dark {
+  color-scheme: dark;
+  --canvas: #09090b;
+  --sidebar: #0c0c0e;
+  --elevated: #18181b;
+  --ink: #fafafa;
+  --muted: #a1a1aa;
+  --line: #27272a;
+  --accent: #818cf8;
+  --accent-fg: #0c0c0e;
+  --user: #27272a;
+  --danger: #f87171;
+  --code: #111113;
+  --chart-chat: #818cf8;
+  --chart-agent: #2dd4bf;
+  --chart-studio: #fbbf24;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-sidebar: var(--sidebar);
+  --color-elevated: var(--elevated);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-user: var(--user);
+  --color-danger: var(--danger);
+  --color-code: var(--code);
+  --font-sans: var(--font-sans-loaded), "PingFang SC", "Microsoft YaHei UI",
+    "Noto Sans SC", sans-serif;
+  --font-mono: var(--font-mono-loaded), ui-monospace, "SFMono-Regular", Menlo,
+    Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+button,
+[role="button"],
+a,
+select,
+summary {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+@layer base {
+  button {
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  }
+  button:enabled:active { transform: scale(0.97); }
+  button:focus-visible, a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  input:focus-visible, textarea:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+.ui-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--elevated);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: 0 1px 2px #00000008, inset 0 1px 0 #ffffff05;
+}
+.ui-select-compact { width: auto; min-height: 34px; padding: 6px 10px; font-size: 12px; }
+.ui-select[aria-expanded="true"] { border-color: var(--accent); background: var(--user); }
+.ui-select:disabled { opacity: 0.4; cursor: not-allowed; }
+.ui-option-menu {
+  position: fixed;
+  z-index: 100;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--elevated);
+  box-shadow: 0 16px 48px #00000030, 0 4px 12px #00000012;
+}
+.ui-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: left;
+}
+.ui-option[aria-checked="true"] { background: color-mix(in srgb, var(--accent) 10%, var(--elevated)); }
+.ui-option:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--user); }
+.slash-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--elevated);
+  box-shadow: 0 16px 48px #00000030, 0 4px 12px #00000012;
+}
+.slash-cmd {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-align: left;
+}
+.slash-cmd-active { background: var(--user); }
+@media (hover: hover) and (pointer: fine) {
+  .slash-cmd:hover { background: var(--user); }
+}
+.composer-surface { box-shadow: 0 4px 24px #0000000a, 0 1px 3px #00000008; }
+.composer-surface:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 7%, transparent), 0 4px 24px #0000000a; }
+.composer-tool { border: 1px solid transparent; }
+.skill-agent-toggle {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+  background: transparent;
+}
+.skill-agent-toggle[data-agent="claude-code"] { --agent-color: #d97757; }
+.skill-agent-toggle[data-agent="codex"],
+.skill-agent-toggle[data-agent="grok-build"] { --agent-color: var(--ink); }
+.skill-agent-toggle[aria-pressed="true"] {
+  color: var(--agent-color);
+  background: color-mix(in srgb, var(--agent-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--agent-color) 22%, transparent);
+}
+.skill-agent-toggle:disabled { cursor: wait; opacity: 0.65; }
+@media (hover: hover) and (pointer: fine) {
+  .skill-agent-toggle:enabled:hover { background: var(--user); }
+  .skill-agent-toggle[aria-pressed="true"]:enabled:hover { background: color-mix(in srgb, var(--agent-color) 20%, transparent); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .ui-select:enabled:hover { background: var(--user); border-color: color-mix(in srgb, var(--muted) 45%, var(--line)); }
+  .ui-option:hover { background: var(--user); }
+  .composer-tool:enabled:hover { border-color: var(--line); }
+}
+@media (prefers-reduced-motion: reduce) {
+  button:enabled:active { transform: none; }
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.xterm {
+  height: 100%;
+  padding: 10px 12px 14px;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.md {
+  font-size: 15px;
+  line-height: 1.75;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.md pre,
+.md img,
+.md video {
+  max-width: 100%;
+}
+
+.md > *:first-child {
+  margin-top: 0;
+}
+
+.md > *:last-child {
+  margin-bottom: 0;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md table {
+  margin: 0.75em 0;
+}
+
+.md h1,
+.md h2,
+.md h3 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 1.1em 0 0.5em;
+}
+
+.md h1 {
+  font-size: 1.4rem;
+}
+
+.md h2 {
+  font-size: 1.2rem;
+}
+
+.md h3 {
+  font-size: 1.05rem;
+}
+
+.md ul,
+.md ol {
+  padding-left: 1.25rem;
+}
+
+.md ul {
+  list-style: disc;
+}
+
+.md ol {
+  list-style: decimal;
+}
+
+.md li + li {
+  margin-top: 0.25rem;
+}
+
+.md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md blockquote {
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  padding-left: 0.9rem;
+}
+
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.25rem 0;
+}
+
+.md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.md th,
+.md td {
+  border: 1px solid var(--line);
+  padding: 0.4rem 0.7rem;
+  text-align: left;
+}
+
+.md th {
+  background: var(--elevated);
+  font-weight: 600;
+}
+
+.md .inline-code {
+  border-radius: 6px;
+  background: var(--code);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hover-bg:hover {
+    background: var(--user);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 执行过程折叠面板：箭头跟着开合转，去掉默认的三角。 */
+.trace > summary {
+  list-style: none;
+}
+.trace > summary::-webkit-details-marker {
+  display: none;
+}
+.trace[open] > summary .trace-chevron {
+  transform: rotate(90deg);
+}
+
+/* 应用级提示（保存了、删除了…）。AI 干活的过程不走这里，那些显示在对话里。 */
+/*
+ * 只动纵向。水平居中交给元素上的 -translate-x-1/2 —— Tailwind 4 里它写的是 CSS 的
+ * `translate` 属性，和 `transform` 是**叠加**的。以前这里写 translate(-50%, …)，
+ * 动画期间等于往左挪了两次，结束后 transform 撤掉又「瞬移」回中间（0.15.5 修的）。
+ */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toast-in {
+  animation: toast-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-in {
+    animation: none;
+  }
+}
+
+/* 自己的确认弹窗，替掉 window.confirm 那个系统框。 */
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.confirm-in {
+  animation: confirm-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .confirm-in {
+    animation: none;
+  }
+}
+
+/* 自己的标题栏：整条可拖，按钮区要设回 no-drag 否则点不动。 */
+.titlebar {
+  -webkit-app-region: drag;
+}
+.titlebar button,
+.titlebar-buttons {
+  -webkit-app-region: no-drag;
+}
+
+/* 自己的视频进度条：Chrome 的 range 默认长得很系统，这里压成一条细线。 */
+.player-range {
+  background-image: linear-gradient(var(--color-accent, #fff), var(--color-accent, #fff));
+  background-repeat: no-repeat;
+}
+.player-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+/*
+ * 输入框里只有图标的开关（联网 / 管理员 / 操控电脑）靠这个告诉用户它是干什么的。
+ * 不用原生 title：那是系统样式的提示框，和皮肤对不上，还要停很久才出来。
+ * 贴着按钮左边缘往右展开 —— 这几个按钮都在输入框左侧，居中的话会冲出窗口。
+ */
+.composer-tool[data-tip] { position: relative; }
+.composer-tool[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 6px 20px #0000002e;
+  opacity: 0;
+  transform: translateY(3px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.composer-tool[data-tip]:hover::after,
+.composer-tool[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 200ms;
 }

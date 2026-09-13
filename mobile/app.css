@@ -1,0 +1,88 @@
+/*
+ * 手机网页和桌面端用同一套颜色和 Markdown 样式（深浅色跟着系统走）。
+ * Tailwind 从仓库根目录扫类名，mobile/ 下面的也会扫到。
+ */
+@import "../app/globals.css";
+
+:root {
+  /* 桌面端这两个变量由 next/font 注入，这里没有，不补上的话整条 font-family 会失效 */
+  --font-sans-loaded: system-ui;
+  --font-mono-loaded: ui-monospace;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.remote-shell {
+  background:
+    radial-gradient(32rem 18rem at 100% -8%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    var(--canvas);
+}
+.remote-shell nav { box-shadow: 0 -10px 30px rgb(15 23 42 / 7%); }
+.remote-shell button {
+  transition: transform 140ms var(--ease-out), background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+.remote-shell button:active { transform: scale(.97); }
+.remote-shell input, .remote-shell textarea, .remote-shell select { box-shadow: 0 1px 2px rgb(15 23 42 / 4%); }
+.remote-shell [class*="border-b"] { border-color: color-mix(in srgb, var(--line) 72%, transparent); }
+
+.sheet-backdrop {
+  background: rgb(0 0 0 / 0.42);
+  animation: fade-in 220ms var(--ease-out) both;
+}
+.sheet-panel {
+  animation: sheet-up 280ms var(--ease-drawer) both;
+}
+.pane-enter {
+  animation: pane-in 220ms var(--ease-out) both;
+}
+.toast-enter {
+  animation: toast-in 180ms var(--ease-out) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes pane-in {
+  from { opacity: 0; transform: translateX(12%); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-backdrop, .sheet-panel, .pane-enter, .toast-enter {
+    animation: none;
+  }
+  .remote-shell button:active { transform: none; }
+}
+
+/* iOS 输入框字号小于 16px 会在聚焦时自动放大页面 */
+textarea,
+input,
+select {
+  font-size: 16px;
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
