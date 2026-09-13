@@ -7,7 +7,9 @@ import { processIsElevated, spawnViaAdminHost } from "./admin-client";
 import { eventsFromJson, type ChatEvent } from "./chat-parse";
 import type { AgentRecord } from "./db";
 import { cliInvocation } from "./detect";
+import { injectConsoleText } from "./cli-inject";
 import { apiEnv, childEnv, isClaudeAuthNoise } from "./launch";
+import { livePidFor } from "./live";
 
 export type ChatTurnOpts = {
   sessionId: string;
@@ -291,6 +293,31 @@ export function runChatTurn(
   let child: ChildProcess | null = null;
   let stopped = false;
 
+  const followExternal = (current: ChatTurnOpts) => {
+    const pid = current.resumeId ? livePidFor(current.agent.kind, current.resumeId) : null;
+    if (!pid || current.mode === "chat" || current.images?.length) return false;
+    let timer: NodeJS.Timeout | null = null;
+    void injectConsoleText(pid, current.prompt).then((ok) => {
+      if (stopped) return;
+      if (!ok) {
+        start(current, true);
+        return;
+      }
+      // 字已经打进用户的终端。回复会写进会话文件，watch 会推到界面。
+      // 等一会儿再 done，让「进行中」能盖住它开始跑的那几秒。
+      timer = setTimeout(() => {
+        if (!stopped) emit({ type: "done" });
+      }, 1500);
+    });
+    child = {
+      kill() {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+      },
+    } as ChildProcess;
+    return true;
+  };
+
   const start = (current: ChatTurnOpts, allowRetry: boolean) => {
     const { args, cleanup, stdin } = buildArgs(current);
     // 怎么把 prompt 交给 CLI 全在 buildArgs 里决定（argv / stdin / --prompt-file）。
@@ -388,7 +415,7 @@ export function runChatTurn(
     });
   };
 
-  start(opts, true);
+  if (!followExternal(opts)) start(opts, true);
   return {
     kill: () => {
       stopped = true;

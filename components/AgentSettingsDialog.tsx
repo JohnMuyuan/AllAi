@@ -580,6 +580,8 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                         {item.model ? ` · ${item.model}` : ""}
                       </p>
                     )}
+                    {(item.id in modelsOpen ? modelsOpen[item.id] : (item.models?.length ?? 0) <= 8) ? (
+                    <>
                     <div className="flex gap-2">
                       <input
                         value={modelDrafts[item.id] || ""}
@@ -633,6 +635,8 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                           </label>
                         ))}
                       </div>
+                    ) : null}
+                    </>
                     ) : null}
                   </div>
                 ) : null}

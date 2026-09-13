@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.16.47**，安装包 `dist/AllAi-Setup-0.16.47.exe`。
+给下一轮对话或下一个人用。当前发版 **0.16.48**，安装包 `dist/AllAi-Setup-0.16.48.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -753,11 +753,13 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.16.47**，安装包 `dist/AllAi-Setup-0.16.47.exe`，桌面快捷方式已更新。
+当前发版 **0.16.48**，安装包 `dist/AllAi-Setup-0.16.48.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
-**最近刚做完（0.16.47）：** 预设图标（`public/brand/presets/` + `lib/preset-icons.ts` 打分匹配）；思考过程不再自动合上；主界面去掉重复版本号；启动画面跟日夜间；Agent 接口模型列表可折叠。
+**最近刚做完（0.16.48）：** 模型折叠含添加框和思考档位；AllAi 发消息会打进用户已开的 Claude/Grok 终端（`electron/cli-inject.ts`，pid 来自登记表，不扫进程名）。Codex 没有 pid 登记，仍走 AllAi 自己 spawn。
+
+**更早（0.16.47）：** 预设图标（`public/brand/presets/` + `lib/preset-icons.ts` 打分匹配）；思考过程不再自动合上；主界面去掉重复版本号；启动画面跟日夜间；Agent 接口模型列表可折叠。
 
 **更早（0.16.46）：** 供应商图标不盖旗下模型；抓图丢掉空白小图。模型走 `ModelIcon`，服务走 `ServiceIcon`。
 

@@ -298,6 +298,7 @@ export function GlobalEndpointsPanel({
                     {item.model ? ` · ${item.model}` : ""}
                   </p>
                 )}
+                {(item.id in modelsOpen ? modelsOpen[item.id] : (item.models?.length ?? 0) <= 8) ? (
                 <input
                   value={modelDrafts[item.id] || ""}
                   onChange={(event) =>
@@ -317,6 +318,7 @@ export function GlobalEndpointsPanel({
                   placeholder={t("输入模型 ID 后回车添加")}
                   className="w-full rounded-xl border border-line bg-elevated px-3 py-2 font-mono text-sm outline-none focus:border-accent"
                 />
+                ) : null}
               </div>
             </div>
           ))}

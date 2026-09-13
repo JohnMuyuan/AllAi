@@ -125,6 +125,18 @@ export function claudeLiveState(sessionId: string): { busy: boolean; pid: number
   return hit ? { busy: hit.busy, pid: hit.pid } : null;
 }
 
+/** 用户自己在终端里开着的那条会话的 pid。没有就不注入。 */
+export function livePidFor(kind: string, sessionId: string): number | null {
+  const id = (sessionId || "").trim();
+  if (!id) return null;
+  if (kind === "claude-code") return claudeLiveState(id)?.pid ?? null;
+  if (kind === "grok-build") {
+    const hit = grokActive().find((item) => item.cliSessionId === id);
+    return hit?.pid ?? null;
+  }
+  return null;
+}
+
 export async function scanLive(): Promise<AgentWork[]> {
   const claude = claudeActive().map<AgentWork>((item) => ({
     id: `claude-code:${item.sessionId}`,
