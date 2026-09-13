@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld("allaiDesktop", {
   windowMinimize: () => ipcRenderer.invoke("window:minimize"),
   windowToggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
   windowClose: () => ipcRenderer.invoke("window:close"),
+  setTheme: (theme: "light" | "dark") => ipcRenderer.send("theme:resolved", theme),
   onWindowState: (cb: (state: { maximized: boolean }) => void) => {
     const listener = (_event: unknown, state: { maximized: boolean }) => cb(state);
     ipcRenderer.on("window:state", listener);

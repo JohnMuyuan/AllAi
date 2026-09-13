@@ -43,10 +43,10 @@ function iconFor(label: string) {
 
 export const AgentTrace = memo(function AgentTrace({ items, streaming, hasContent }: Props) {
   const t = useT();
-  const [userOpen, setUserOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const hasError = items.some((item) => item.type === "tool" && item.name === "出错");
-  const forceOpen = (streaming && !hasContent) || hasError;
-  const open = forceOpen || userOpen;
+  const autoOpen = (streaming && !hasContent) || hasError;
+  if (autoOpen && !open) setOpen(true);
 
   if (!items.length) return null;
 
@@ -67,20 +67,18 @@ export const AgentTrace = memo(function AgentTrace({ items, streaming, hasConten
     : t("执行过程 · {n} 步操作", { n: tools.length });
 
   return (
-    <details
-      open={open}
-      onToggle={(event) => {
-        if (forceOpen) return;
-        setUserOpen((event.target as HTMLDetailsElement).open);
-      }}
-      className="trace mb-3 rounded-xl border border-line bg-elevated text-sm text-muted"
-    >
-      <summary className="flex cursor-pointer select-none items-center gap-1.5 px-3 py-2 text-xs font-medium">
+    <div className={`trace mb-3 rounded-xl border border-line bg-elevated text-sm text-muted ${open ? "trace-open" : ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full cursor-pointer select-none items-center gap-1.5 px-3 py-2 text-left text-xs font-medium"
+      >
         <ChevronRight className="trace-chevron size-3.5 shrink-0 transition-transform duration-150" />
         {hasThinking ? <Sparkles className="size-3.5 shrink-0 text-accent" /> : null}
         <span className="truncate">{summary}</span>
         {streaming ? <span className="ml-auto shrink-0 text-[10px]">{t("进行中…")}</span> : null}
-      </summary>
+      </button>
+      {open ? (
       <div className="flex flex-col gap-1.5 border-t border-line px-3 py-2.5">
         {items.map((item, index) =>
           item.type === "thinking" ? (
@@ -98,7 +96,8 @@ export const AgentTrace = memo(function AgentTrace({ items, streaming, hasConten
           ),
         )}
       </div>
-    </details>
+      ) : null}
+    </div>
   );
 });
 

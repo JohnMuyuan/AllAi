@@ -11,7 +11,7 @@ import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
 import { providerIconKey, writeProviderIcon } from "@/lib/brand";
 import { PROVIDER_TEMPLATES } from "@/lib/templates";
-import { APP_VERSION } from "@/lib/version";
+
 import type { AppPrefs, ManagedSkill, ModelRef, ProviderAuth, PublicAgent, PublicProvider } from "@/lib/types";
 import type { LangMode } from "@/lib/i18n";
 import type { ThemeMode } from "@/lib/theme";
@@ -365,7 +365,6 @@ export function SettingsDialog({
             <p className="text-sm text-muted">
               {t("模型与接口、Agent 官方登录、远程控制都在这里；本机 CLI 的版本和更新在「关于」。")}
             </p>
-            <p className="mt-1 text-xs text-muted">{t("版本")} {APP_VERSION}</p>
           </div>
           <button
             type="button"
@@ -831,7 +830,7 @@ export function SettingsDialog({
         </>
         )}
         <div className="border-t border-line px-5 py-2.5 text-xs text-muted">
-          AllAi {APP_VERSION}
+          AllAi
         </div>
       </div>
     </div>

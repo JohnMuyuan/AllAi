@@ -1,4 +1,5 @@
 import { BRAND_COLOR, BRAND_SHORT, type BrandId } from "@/lib/brand";
+import { BRAND_PRESET_FILE, PRESET_ICONS, presetSrc } from "@/lib/preset-icons";
 import type { AgentKind } from "@/lib/types";
 
 /** 有矢量图的三家，其余牌子走品牌色块。 */
@@ -25,6 +26,19 @@ export function BrandGlyph({
   className?: string;
 }) {
   if (!brand) return null;
+  const file = BRAND_PRESET_FILE[brand];
+  if (file) {
+    const preset = PRESET_ICONS.find((item) => item.file === file);
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 软件自带的预设 SVG
+      <img
+        src={presetSrc(file)}
+        alt=""
+        aria-hidden="true"
+        className={`${className} shrink-0 object-contain ${preset && !preset.color ? "brand-invert" : ""}`}
+      />
+    );
+  }
   const kind = VECTOR_KIND[brand];
   if (kind) return <BrandMark kind={kind} className={`${className} shrink-0`} />;
   return <BrandMonogram brand={brand} className={className} />;

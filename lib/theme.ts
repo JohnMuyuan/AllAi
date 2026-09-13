@@ -8,6 +8,8 @@
  * 纯函数 + 浏览器 API，界面和 app/layout.tsx 里那段防闪烁脚本共用同一套键名。
  */
 
+import { getDesktop } from "./desktop";
+
 export type ThemeMode = "light" | "dark" | "system";
 
 export const THEME_KEY = "allai-theme";
@@ -51,6 +53,7 @@ export function resolveTheme(mode: ThemeMode): "dark" | "light" {
 export function applyTheme(mode: ThemeMode) {
   const resolved = resolveTheme(mode);
   document.documentElement.classList.toggle("dark", resolved === "dark");
+  getDesktop()?.setTheme?.(resolved);
   return resolved;
 }
 

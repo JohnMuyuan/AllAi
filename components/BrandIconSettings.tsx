@@ -11,6 +11,8 @@ import {
 import type { AppPrefs, PublicProvider } from "@/lib/types";
 import { useT } from "./I18n";
 import { ModelIcon } from "./ModelIcon";
+import { PresetIconPicker } from "./PresetIconPicker";
+import { BRAND_PRESET_FILE, presetSrc } from "@/lib/preset-icons";
 
 type Props = {
   providers: PublicProvider[];
@@ -37,6 +39,7 @@ export function BrandIconSettings({ providers, prefs, onChange, onToast }: Props
   const icons = prefs.brandIcons ?? {};
   const [busy, setBusy] = useState("");
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [focusKey, setFocusKey] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const pendingKey = useRef("");
 
@@ -125,7 +128,12 @@ export function BrandIconSettings({ providers, prefs, onChange, onToast }: Props
   function IconRow({ row }: { row: Row }) {
     const custom = icons[row.key];
     return (
-      <div className="flex items-center gap-2 border-t border-line py-2 first:border-t-0">
+      <div
+        className={`flex items-center gap-2 border-t border-line py-2 first:border-t-0 ${
+          focusKey === row.key ? "bg-user/60" : ""
+        }`}
+        onClick={() => setFocusKey(row.key)}
+      >
         <div className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-canvas">
           <ModelIcon modelId={row.sample} baseUrl={row.baseUrl} icons={icons} className="size-5" />
         </div>
@@ -200,8 +208,16 @@ export function BrandIconSettings({ providers, prefs, onChange, onToast }: Props
         }}
       />
       <p className="mb-3 text-xs leading-5 text-muted">
-        {t("模型名前面的厂商图标。Anthropic / xAI / OpenAI 是自带的矢量图，其余认得出牌子的画品牌色块（DeepSeek、通义、Kimi、智谱这些都有）。想换成真图标：填网站域名会去它页面上找图标，填图片网址就直接用那张图，也可以从本地选一张。某一条服务自己的图标去「聊天模型 / Agent 接口」里那条服务上配。图标存在本机，不会每次渲染都去打别人的服务器。")}
+        {t("模型名前面的厂商图标。点下面一行再选预设，或自己填网址、上传。某一条服务自己的图标去「聊天模型 / Agent 接口」里那条服务上配。")}
       </p>
+      {focusKey ? (
+        <div className="mb-3">
+          <PresetIconPicker
+            value={icons[focusKey] || (BRAND_PRESET_FILE[focusKey as BrandId] ? presetSrc(BRAND_PRESET_FILE[focusKey as BrandId]!) : "")}
+            onPick={(src) => save(focusKey, src)}
+          />
+        </div>
+      ) : null}
 
       {rows.brands.length ? (
         <div className="mb-4 rounded-2xl border border-line px-3 py-1">

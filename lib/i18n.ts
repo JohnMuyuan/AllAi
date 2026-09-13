@@ -502,6 +502,10 @@ const EN: Record<string, string> = {
   "上限 token": "Limit (tokens)",
 
   /* 图标 */
+  "预设图标": "Preset icons",
+  "已收起 {n} 个模型": "{n} models collapsed",
+  "模型名前面的厂商图标。点下面一行再选预设，或自己填网址、上传。某一条服务自己的图标去「聊天模型 / Agent 接口」里那条服务上配。":
+    "Vendor icons in front of model names. Click a row, then pick a preset, or paste a URL / upload. A service’s own icon is set on that service under Chat models / Agent endpoints.",
   "图标": "Icon",
   "正在抓取图标…": "Fetching icon…",
   "填接口地址后会自动抓网站图标，也可以自己上传或填网址。":
@@ -1151,6 +1155,13 @@ const EN: Record<string, string> = {
 
   /* 厂商名（lib/brand.ts 的 BRAND_LABEL） */
   "通义千问": "Qwen",
+  "阿里巴巴": "Alibaba",
+  "阿里云": "Alibaba Cloud",
+  "阿里云百炼": "Alibaba Cloud Model Studio",
+  "字节跳动": "ByteDance",
+  "腾讯云": "Tencent Cloud",
+  "百度智能云": "Baidu AI Cloud",
+  "华为云": "Huawei Cloud",
   "智谱 GLM": "Zhipu GLM",
   "豆包": "Doubao",
   "腾讯混元": "Tencent Hunyuan",

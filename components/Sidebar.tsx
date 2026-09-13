@@ -17,7 +17,7 @@ import {
 import { useMemo, useState } from "react";
 import { groupConversations } from "@/lib/dates";
 import { useT } from "./I18n";
-import { APP_VERSION } from "@/lib/version";
+
 import type { ConversationSummary } from "@/lib/types";
 import type { AgentWork } from "@/types/desktop";
 import { Logo } from "./Logo";
@@ -301,7 +301,7 @@ export function Sidebar({
         <Logo className="size-8" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold tracking-tight">AllAi</div>
-          <div className="truncate text-[11px] text-muted">v{APP_VERSION} · {t("高效地与AI工作")}</div>
+          <div className="truncate text-[11px] text-muted">{t("高效地与AI工作")}</div>
         </div>
         <button
           type="button"
@@ -571,7 +571,6 @@ export function Sidebar({
       )}
 
       <div className="mt-auto border-t border-line p-2">
-        <div className="px-3 py-1 text-[11px] text-muted">版本 {APP_VERSION}</div>
         {onOpenSearch ? (
           <button
             type="button"

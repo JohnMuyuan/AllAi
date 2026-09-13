@@ -1,5 +1,5 @@
 import { ChildProcess, spawn } from "child_process";
-import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, shell } from "electron";
 import fs from "fs";
 import net from "net";
 import path from "path";
@@ -186,15 +186,32 @@ function safeExternalUrl(raw: string) {
   }
 }
 
+function uiThemeFile() {
+  return path.join(app.getPath("userData"), "ui-theme");
+}
+
+function splashTheme(): "dark" | "light" {
+  try {
+    const stored = fs.readFileSync(uiThemeFile(), "utf8").trim();
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // 还没存过就跟系统
+  }
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+}
+
 async function createWindow() {
+  const theme = splashTheme();
+  const splashBg = theme === "light" ? "#f4f4f5" : "#09090b";
+  const splashFg = theme === "light" ? "#3f3f46" : "#a1a1aa";
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 980,
     minHeight: 640,
-    title: `AllAi ${app.getVersion()}`,
+    title: "AllAi",
     icon: isDev() ? path.join(app.getAppPath(), "packaging", "icon.png") : path.join(process.resourcesPath, "icon.png"),
-    backgroundColor: "#09090b",
+    backgroundColor: splashBg,
     autoHideMenuBar: true,
     // 用自己的标题栏：系统那条会跟着 Windows 主题色变，和皮肤对不上。
     frame: false,
@@ -233,7 +250,7 @@ async function createWindow() {
   await mainWindow.loadURL(
     "data:text/html;charset=utf-8," +
       encodeURIComponent(
-        `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:#09090b;color:#a1a1aa;font-family:Segoe UI,sans-serif"><div>AllAi ${app.getVersion()} 启动中…</div></body></html>`,
+        `<!doctype html><html><body style="margin:0;height:100vh;display:grid;place-items:center;background:${splashBg};color:${splashFg};font-family:Segoe UI,sans-serif"><div>AllAi 启动中…</div></body></html>`,
       ),
   );
   revealWindow();
@@ -325,6 +342,17 @@ function registerIpc() {
     else mainWindow.maximize();
   });
   ipcMain.handle("window:close", () => mainWindow?.close());
+  ipcMain.on("theme:resolved", (_event, theme: string) => {
+    const next = theme === "light" ? "light" : "dark";
+    try {
+      fs.writeFileSync(uiThemeFile(), next, "utf8");
+    } catch {
+      // 写不进去下次启动就跟系统
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(next === "light" ? "#f4f4f5" : "#09090b");
+    }
+  });
   ipcMain.handle("agent:watch-work", (_event, work) => watchWork(work));
   ipcMain.handle("agent:unwatch-work", () => unwatchWork());
   ipcMain.handle("cli:auth-status", (_event, kind: string, command?: string) =>

@@ -2,6 +2,8 @@
 
 import { Download, RotateCcw, Server, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { bestPreset, presetSrc } from "@/lib/preset-icons";
+import { PresetIconPicker } from "./PresetIconPicker";
 import { useT } from "./I18n";
 
 async function fetchSiteIcon(source: string, signal: AbortSignal): Promise<string> {
@@ -71,6 +73,11 @@ export function ProviderIconField({
     if (fetchedFor.current === autoSource) return;
     const handle = window.setTimeout(() => {
       fetchedFor.current = autoSource;
+      const hit = bestPreset(autoSource);
+      if (hit) {
+        onIcon(presetSrc(hit.file));
+        return;
+      }
       void grab(autoSource, true);
     }, 400);
     return () => window.clearTimeout(handle);
@@ -79,6 +86,13 @@ export function ProviderIconField({
 
   async function grab(source: string, silent = false) {
     if (!source.trim()) return;
+    const hit = bestPreset(source);
+    if (hit) {
+      onIcon(presetSrc(hit.file));
+      setDraft("");
+      if (!silent) onToast?.(t("图标已保存"));
+      return;
+    }
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -186,6 +200,7 @@ export function ProviderIconField({
       <span className="mt-1 block text-xs text-muted">
         {busy ? t("正在抓取图标…") : t("填接口地址后会自动抓网站图标，也可以自己上传或填网址。")}
       </span>
+      <PresetIconPicker value={icon} onPick={onIcon} />
     </div>
   );
 }

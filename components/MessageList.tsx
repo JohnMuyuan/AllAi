@@ -290,8 +290,11 @@ const AssistantBubble = memo(function AssistantBubble({
 }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [thinkingOpen, setThinkingOpen] = useState(false);
   const steps = message.steps ?? [];
   const empty = !message.content && !message.reasoning;
+  const autoThink = streaming && !message.content;
+  if (autoThink && !thinkingOpen) setThinkingOpen(true);
 
   async function copy() {
     await navigator.clipboard.writeText(message.content);
@@ -303,15 +306,20 @@ const AssistantBubble = memo(function AssistantBubble({
     <div className="group min-w-0">
       <Steps steps={steps} streaming={streaming} />
       {message.reasoning ? (
-        <details
-          open={streaming && !message.content}
-          className="mb-3 rounded-xl border border-line bg-elevated px-3 py-2 text-sm text-muted"
-        >
-          <summary className="cursor-pointer select-none text-xs font-medium">{t("思考过程")}</summary>
-          <Foldable text={message.reasoning}>
-            {(shown) => <div className="mt-2 whitespace-pre-wrap leading-6">{shown}</div>}
-          </Foldable>
-        </details>
+        <div className="mb-3 rounded-xl border border-line bg-elevated px-3 py-2 text-sm text-muted">
+          <button
+            type="button"
+            onClick={() => setThinkingOpen((current) => !current)}
+            className="cursor-pointer select-none text-xs font-medium"
+          >
+            {t("思考过程")}
+          </button>
+          {thinkingOpen ? (
+            <Foldable text={message.reasoning}>
+              {(shown) => <div className="mt-2 whitespace-pre-wrap leading-6">{shown}</div>}
+            </Foldable>
+          ) : null}
+        </div>
       ) : null}
       {empty && streaming ? (
         <div className="flex gap-1 py-2" aria-label={t("正在生成")}>

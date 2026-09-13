@@ -44,7 +44,14 @@ export type BrandId =
   // 聚合平台
   | "openrouter"
   | "siliconflow"
-  | "groq";
+  | "groq"
+  | "alibaba"
+  | "bailian"
+  | "copilot"
+  | "huawei"
+  | "luma"
+  | "midjourney"
+  | "ollama";
 
 export const BRAND_LABEL: Record<BrandId, string> = {
   anthropic: "Anthropic",
@@ -75,6 +82,13 @@ export const BRAND_LABEL: Record<BrandId, string> = {
   openrouter: "OpenRouter",
   siliconflow: "硅基流动",
   groq: "Groq",
+  alibaba: "阿里云",
+  bailian: "阿里云百炼",
+  copilot: "GitHub Copilot",
+  huawei: "华为云",
+  luma: "Luma",
+  midjourney: "Midjourney",
+  ollama: "Ollama",
 };
 
 /**
@@ -110,6 +124,13 @@ export const BRAND_COLOR: Record<BrandId, string> = {
   openrouter: "#6467F2",
   siliconflow: "#6E29F7",
   groq: "#F55036",
+  alibaba: "#FF6A00",
+  bailian: "#615CED",
+  copilot: "#24292F",
+  huawei: "#C7000B",
+  luma: "#000000",
+  midjourney: "#111111",
+  ollama: "#111111",
 };
 
 /** 色块里的缩写，1–2 个字符。 */
@@ -142,10 +163,38 @@ export const BRAND_SHORT: Record<BrandId, string> = {
   openrouter: "Or",
   siliconflow: "Sf",
   groq: "Gq",
+  alibaba: "Ali",
+  bailian: "Bl",
+  copilot: "Gh",
+  huawei: "Hw",
+  luma: "Lu",
+  midjourney: "Mj",
+  ollama: "Ol",
 };
 
-/** 我们自带矢量图标的牌子，其余认出来的画品牌色块。 */
-export const BUILT_IN_BRANDS: BrandId[] = ["anthropic", "xai", "openai"];
+/** 有预设 SVG 的牌子，其余认出来的画品牌色块。 */
+export const BUILT_IN_BRANDS: BrandId[] = [
+  "anthropic",
+  "xai",
+  "openai",
+  "google",
+  "meta",
+  "microsoft",
+  "deepseek",
+  "qwen",
+  "alibaba",
+  "bailian",
+  "moonshot",
+  "zhipu",
+  "doubao",
+  "hunyuan",
+  "ernie",
+  "copilot",
+  "huawei",
+  "luma",
+  "midjourney",
+  "ollama",
+];
 
 /*
  * 模型名规则。**顺序有意义**：越具体的越靠前。
@@ -179,6 +228,11 @@ const MODEL_RULES: [RegExp, BrandId][] = [
   [/sensenova|sensechat|sense-\d/, "sensenova"],
   [/skywork/, "skywork"],
   [/longcat/, "longcat"],
+  [/copilot/, "copilot"],
+  [/pangu|huawei/, "huawei"],
+  [/luma|dream-machine/, "luma"],
+  [/midjourney/, "midjourney"],
+  [/ollama/, "ollama"],
   // —— 聚合平台 ——
   [/siliconflow/, "siliconflow"],
   [/openrouter/, "openrouter"],
@@ -202,7 +256,9 @@ const HOST_RULES: [RegExp, BrandId][] = [
   [/openai\.com|azure/, "openai"],
   // —— 国内 ——
   [/deepseek\.com/, "deepseek"],
-  [/dashscope|aliyun|alibabacloud/, "qwen"],
+  [/bailian/, "bailian"],
+  [/alibabacloud|aliyun/, "alibaba"],
+  [/dashscope/, "qwen"],
   [/moonshot/, "moonshot"],
   [/bigmodel|zhipu/, "zhipu"],
   [/volces|volcengine|bytedance/, "doubao"],
@@ -217,6 +273,11 @@ const HOST_RULES: [RegExp, BrandId][] = [
   [/sensenova/, "sensenova"],
   [/skywork/, "skywork"],
   [/longcat/, "longcat"],
+  [/github\.com|copilot/, "copilot"],
+  [/huaweicloud|myhuaweicloud|huawei\.com/, "huawei"],
+  [/lumalabs|luma\./, "luma"],
+  [/midjourney/, "midjourney"],
+  [/ollama/, "ollama"],
   // —— 聚合平台 ——
   [/siliconflow/, "siliconflow"],
   [/openrouter\.ai/, "openrouter"],

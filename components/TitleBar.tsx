@@ -14,7 +14,7 @@ import { useRemoteStatus } from "./useRemoteControl";
  * 拖动靠 CSS 的 `-webkit-app-region`：整条可拖，按钮上要显式设回 no-drag，
  * 否则点不动。
  */
-export function TitleBar({ version }: { version: string }) {
+export function TitleBar() {
   const t = useT();
   const [maximized, setMaximized] = useState(false);
   const [ready, setReady] = useState(false);
@@ -42,7 +42,6 @@ export function TitleBar({ version }: { version: string }) {
     <div className="titlebar flex h-9 shrink-0 items-center gap-2 border-b border-line bg-sidebar pl-3 select-none">
       <Logo className="size-4" />
       <span className="text-[11px] font-medium tracking-tight text-muted">AllAi</span>
-      <span className="text-[11px] text-muted/70">v{version}</span>
       <div className="ml-auto flex h-full titlebar-buttons">
         {remote && remote.state !== "off" ? (
           <button

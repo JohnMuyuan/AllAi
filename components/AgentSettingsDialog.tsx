@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, LogIn, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ChevronRight, Globe, LogIn, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { kindInfo } from "@/lib/agents";
 import { providerIconKey, writeProviderIcon, type BrandIcons } from "@/lib/brand";
@@ -59,6 +59,7 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
   const [notice, setNotice] = useState("");
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
   const [freshIds, setFreshIds] = useState<Record<string, true>>({});
+  const [modelsOpen, setModelsOpen] = useState<Record<string, boolean>>({});
   const iconsRef = useRef(icons);
   useEffect(() => {
     iconsRef.current = icons;
@@ -503,7 +504,26 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                 {item.mode === "api" || item.mode === "official" ? (
                   <div className={`${item.mode === "api" ? "mt-2 " : ""}space-y-2`}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium">{t("模型")}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setModelsOpen((current) => ({
+                            ...current,
+                            [item.id]: !(item.id in current ? current[item.id] : (item.models?.length ?? 0) <= 8),
+                          }))
+                        }
+                        className="inline-flex items-center gap-1 text-xs font-medium"
+                      >
+                        <ChevronRight
+                          className={`size-3.5 transition-transform ${
+                            (item.id in modelsOpen ? modelsOpen[item.id] : (item.models?.length ?? 0) <= 8)
+                              ? "rotate-90"
+                              : ""
+                          }`}
+                        />
+                        {t("模型")}
+                        {(item.models?.length ?? 0) > 0 ? ` · ${item.models?.length}` : ""}
+                      </button>
                       <button
                         type="button"
                         hidden={item.global}
@@ -519,6 +539,7 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                         {saving ? t("同步中…") : item.mode === "official" ? t("从官方同步") : t("从接口同步")}
                       </button>
                     </div>
+                    {(item.id in modelsOpen ? modelsOpen[item.id] : (item.models?.length ?? 0) <= 8) ? (
                     <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
                       {(item.models ?? []).length === 0 ? (
                         <span className="text-xs text-muted">{t("还没有模型，同步或手动添加。删掉后点保存。")}</span>
@@ -553,6 +574,12 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                         ))
                       )}
                     </div>
+                    ) : (
+                      <p className="text-xs text-muted">
+                        {t("已收起 {n} 个模型", { n: item.models?.length ?? 0 })}
+                        {item.model ? ` · ${item.model}` : ""}
+                      </p>
+                    )}
                     <div className="flex gap-2">
                       <input
                         value={modelDrafts[item.id] || ""}

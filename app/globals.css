@@ -19,6 +19,11 @@
   --chart-studio: #d97706;
 }
 
+html.dark img.brand-invert,
+html.dark .brand-invert {
+  filter: invert(1);
+}
+
 html.dark {
   color-scheme: dark;
   --canvas: #09090b;
@@ -363,14 +368,8 @@ button:disabled {
   }
 }
 
-/* 执行过程折叠面板：箭头跟着开合转，去掉默认的三角。 */
-.trace > summary {
-  list-style: none;
-}
-.trace > summary::-webkit-details-marker {
-  display: none;
-}
-.trace[open] > summary .trace-chevron {
+/* 执行过程折叠面板：箭头跟着开合转。 */
+.trace.trace-open .trace-chevron {
   transform: rotate(90deg);
 }
 

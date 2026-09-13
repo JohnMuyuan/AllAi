@@ -182,6 +182,7 @@ export type AllAiDesktop = {
   windowMinimize: () => Promise<void>;
   windowToggleMaximize: () => Promise<void>;
   windowClose: () => Promise<void>;
+  setTheme: (theme: "light" | "dark") => void;
   onWindowState: (cb: (state: { maximized: boolean }) => void) => () => void;
   watchWork: (work: AgentWork) => Promise<{ ok: true } | { ok: false; error: string }>;
   unwatchWork: () => Promise<{ ok: true }>;
