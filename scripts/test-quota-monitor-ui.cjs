@@ -170,12 +170,12 @@ app.whenReady().then(async () => {
     check("周额度已用 76%", /周额度已用\s*76%/.test(text), (text.match(/周额度已用[^\n]*\n[^\n]*/) || [""])[0]);
     check("折合金额按美元显示", /周额度折合\s*\$[\d,.]+/.test(text), (text.match(/周额度折合[^\n]*\n[^\n]*/) || [""])[0]);
     check("型号表里有 claude-opus-5 和 claude-sonnet-5", /claude-opus-5/.test(text) && /claude-sonnet-5/.test(text));
-    check("健康提示有标题和说明", /(额度充裕|有点紧|会提前用完|马上就要用完)/.test(text) && /按现在的速度/.test(text));
+    check("健康提示有标题和说明", /(额度充裕|有点紧|会提前用完|马上就要用完)/.test(text) && /按这周的节奏/.test(text));
     check("Claude 的归属说明写清楚了", /settings\.json/.test(text));
     const charts = await js("document.querySelectorAll('svg[role=img]').length");
     check("两张 SVG 图（走势 + 每小时）", charts >= 2, String(charts));
     const projection = await js("Boolean(document.querySelector('svg[role=img] line[stroke-dasharray]'))");
-    check("走势图画了按当前速度推算的虚线", projection);
+    check("走势图画了按这周节奏推算的虚线", projection);
     await shot("quota-light.png");
 
     // 悬停走势图：出提示

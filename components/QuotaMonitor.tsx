@@ -304,18 +304,18 @@ function healthDetail(report: AccountReport, now: number, f: Format, t: Translat
     }
     case "runs-out-soon":
     case "runs-out":
-      return t("按现在的速度，大约 {time}（{left}后）用完，比重置早 {early}。", {
+      return t("按这周的节奏（含休息），大约 {time}（{left}后）用完，比重置早 {early}。", {
         time: f.when(main?.etaAt),
         left: f.span((main?.etaAt ?? now) - now),
         early: f.span((main?.resetAt ?? 0) - (main?.etaAt ?? 0)),
       });
     case "tight":
-      return t("按现在的速度，重置时会用到 {p}，接近上限。", { p: f.pct(main?.projectedAtReset) });
+      return t("按这周的节奏，重置时会用到 {p}，接近上限。", { p: f.pct(main?.projectedAtReset) });
     case "five-hour-high":
       return t("5 小时窗口已用 {p}，短时间内再大量使用可能会被限速。", { p: f.pct(report.five?.used) });
     default:
       return main?.projectedAtReset != null
-        ? t("按现在的速度，重置时大约用到 {p}。", { p: f.pct(main.projectedAtReset) })
+        ? t("按这周的节奏，重置时大约用到 {p}。", { p: f.pct(main.projectedAtReset) })
         : t("再采样一段时间就能给出预测。");
   }
 }
@@ -341,7 +341,13 @@ function buildTiles(report: AccountReport, now: number, f: Format, t: Translate)
     tiles.push({
       label: t("消耗速度"),
       value: perHour(main.ratePerH),
-      sub: t("最近 {a} · 平均 {b}", { a: perHour(main.recentPerH), b: perHour(main.averagePerH) }),
+      sub:
+        main.activeShare != null
+          ? t("含休息 · 大约每天用 {n} 小时 · 最近 {a}", {
+              n: Math.max(1, Math.round(main.activeShare * 24)),
+              a: perHour(main.recentPerH),
+            })
+          : t("含休息的平均 · 最近 {a}", { a: perHour(main.recentPerH) }),
     });
 
     const exhausted = main.used >= 100;
@@ -482,7 +488,7 @@ function TrendChart({
   const last = trend[trend.length - 1];
   const area = `${line} L${x(last.at).toFixed(1)} ${y(0)} L${x(trend[0].at).toFixed(1)} ${y(0)} Z`;
 
-  // 虚线 = 按当前速度往后推，到 100% 或者到重置为止
+  // 虚线 = 按这周平均节奏（含休息）往后推，到 100% 或者到重置为止
   let projection: { x: number; y: number } | null = null;
   if (week.ratePerH && week.ratePerH > 0 && week.resetAt != null && last.pct < 100) {
     const hitAt = last.at + ((100 - last.pct) / week.ratePerH) * HOUR_MS;
@@ -587,7 +593,7 @@ function TrendChart({
             <svg width="16" height="4" aria-hidden="true">
               <line x1="0" x2="16" y1="2" y2="2" stroke="var(--series-1)" strokeOpacity="0.55" strokeWidth="2" strokeDasharray="4 4" />
             </svg>
-            {t("按当前速度推算")}
+            {t("按这周节奏推算")}
           </span>
         ) : null}
       </div>
@@ -877,7 +883,7 @@ function Notes({ kind, sessions }: { kind: AccountKind; sessions: Sessions }) {
           "额度折合 = 这个窗口里用掉的量 ÷ 官方显示的已用百分比。已用越多越准；花费按各家 API 公开价估算，不是账单。",
         )}
       </p>
-      <p>{t("速度取「最近」和「整个窗口平均」里较快的一个，预警宁可偏早。")}</p>
+      <p>{t("预测按这周实际节奏（已用百分比 ÷ 已经过的时间），把休息算进去，不会假设你 24 小时不停用。")}</p>
       <p>{attribution}</p>
     </div>
   );

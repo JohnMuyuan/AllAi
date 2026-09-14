@@ -9,8 +9,9 @@
  * - **窗口起点**：周窗口优先用接口直接给的 weekStart（Grok 有），否则 weekReset - 7 天；
  *   5 小时窗口 = fiveReset - 5 小时。
  * - **窗口里百分比掉下来之前的样本不算**：到点重置、或者用了一次手动重置，前面的点就不属于这个窗口了。
- * - **速度取「最近」和「整个窗口平均」里较快的那个**。只看最近的话，睡了一觉回来最近 6 小时是 0，
- *   会得出「永远用不完」；只看平均又反应不过来突然开始猛用。额度预警宁可偏保守。
+ * - **预测用整段窗口的平均节奏（已用% ÷ 已经过的墙上时钟小时）**。休息、睡觉已经在分母里，
+ *   不会把晚上两小时的爆发拉成一条 24 小时不停跑的直线。最近速度只给界面看；
+ *   睡一觉回来最近是 0，预测仍走平均，不会说「永远用不完」。
  * - **折算整窗额度要求已用 >= 2%**：Claude 的 utilization 是整数，1% 的时候误差能放大几十倍。
  *   已用越多越准，界面上把可信度标出来。
  * - 采样之后已经到点重置、接口还没再问过：按新窗口从 0 算，不拿上个窗口的百分比吓人。
@@ -42,10 +43,12 @@ export type WindowReport = {
   leftH?: number;
   /** 最近一段（周 6 小时 / 5 小时窗口 1 小时）每小时涨几个百分点。采样跨度不够时没有。 */
   recentPerH?: number;
-  /** 整个窗口平均每小时涨几个百分点。 */
+  /** 整个窗口平均每小时涨几个百分点（含休息）。 */
   averagePerH?: number;
-  /** 预测用的速度：上面两个里较快的。 */
+  /** 预测用的速度：就是 averagePerH。最近爆发不拿去当 24 小时不停跑。 */
   ratePerH?: number;
+  /** 这个窗口里真正有用量的小时占比。有的话界面可以写成「大约每天用 n 小时」。 */
+  activeShare?: number;
   /** 按 ratePerH 什么时候到 100%。已经用完、或者速度为 0 时没有。 */
   etaAt?: number;
   /** 按 ratePerH 到重置那一刻会是多少。可以超过 100（表示会提前用完）。 */
@@ -117,6 +120,19 @@ function sumRows(rows: HourRow[], from: number, to: number) {
   return { tokens, costUsd };
 }
 
+/** 窗口里真正有 token 的小时 / 墙上时钟小时。不足半天或完全没用量就不报。 */
+function activeShareOf(rows: HourRow[], startAt: number | undefined, now: number) {
+  if (startAt == null) return undefined;
+  const elapsedH = (now - startAt) / HOUR_MS;
+  if (elapsedH < 12) return undefined;
+  const hours = new Set<number>();
+  for (const row of rows) {
+    if (row.tokens > 0 && row.hour + HOUR_MS > startAt && row.hour < now) hours.add(row.hour);
+  }
+  if (!hours.size) return undefined;
+  return Math.min(1, hours.size / elapsedH);
+}
+
 /** 采样之后已经过了重置点：换到新窗口、从 0 算。 */
 function rollWindow(current: number, startAt: number | undefined, resetAt: number | undefined, length: number, now: number) {
   if (resetAt == null || resetAt > now) return { current, startAt, resetAt, stale: false };
@@ -143,8 +159,8 @@ export function analyzeWindow(
     }
   }
   const averagePerH = elapsedH != null && elapsedH * HOUR_MS >= minSpanMs ? current / elapsedH : undefined;
-  const rates = [recentPerH, averagePerH].filter((value): value is number => value != null && Number.isFinite(value));
-  const ratePerH = rates.length ? Math.max(...rates) : undefined;
+  const ratePerH = averagePerH;
+  const activeShare = activeShareOf(rows, startAt, now);
 
   const exhausted = current >= 100;
   const etaAt = !exhausted && ratePerH != null && ratePerH > 0 ? now + ((100 - current) / ratePerH) * HOUR_MS : undefined;
@@ -171,6 +187,7 @@ export function analyzeWindow(
     recentPerH,
     averagePerH,
     ratePerH,
+    activeShare,
     etaAt,
     projectedAtReset,
     runsOutBeforeReset,

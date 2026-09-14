@@ -1339,15 +1339,17 @@ const EN: Record<string, string> = {
   "按 token 计算": "By tokens",
   "官方接口暂时没有返回这个账号的额度。": "The official endpoint has not returned quota for this account yet.",
   "已经用完，{time} 重置。": "Used up. Resets {time}.",
-  "按现在的速度，大约 {time}（{left}后）用完，比重置早 {early}。": "At the current pace it runs out around {time} (in {left}), {early} before reset.",
-  "按现在的速度，重置时会用到 {p}，接近上限。": "At the current pace you will reach {p} by reset, close to the limit.",
+  "按这周的节奏（含休息），大约 {time}（{left}后）用完，比重置早 {early}。":
+    "At this week’s pace (including rest) it runs out around {time} (in {left}), {early} before reset.",
+  "按这周的节奏，重置时会用到 {p}，接近上限。": "At this week’s pace you will reach {p} by reset, close to the limit.",
   "5 小时窗口已用 {p}，短时间内再大量使用可能会被限速。": "The 5-hour window is at {p}. Heavy use in the next few hours may get rate limited.",
-  "按现在的速度，重置时大约用到 {p}。": "At the current pace you will be at about {p} by reset.",
+  "按这周的节奏，重置时大约用到 {p}。": "At this week’s pace you will be at about {p} by reset.",
   "再采样一段时间就能给出预测。": "A forecast appears after a little more sampling.",
   "{n}%/小时": "{n}%/h",
   "周额度已用": "Weekly used",
   "消耗速度": "Burn rate",
-  "最近 {a} · 平均 {b}": "Recent {a} · average {b}",
+  "含休息的平均 · 最近 {a}": "Average including rest · recent {a}",
+  "含休息 · 大约每天用 {n} 小时 · 最近 {a}": "Including rest · about {n} h/day · recent {a}",
   "预计用完": "Runs out",
   "已用完": "Used up",
   "重置前用不完": "Not before reset",
@@ -1367,7 +1369,7 @@ const EN: Record<string, string> = {
   "可用重置次数": "Resets available",
   "至少要两次采样才能画出曲线。AllAi 开着时每 5 分钟采一次。": "The line needs at least two samples. AllAi samples every 5 minutes while open.",
   "已用": "Used",
-  "按当前速度推算": "Projected at current pace",
+  "按这周节奏推算": "Projected at this week’s pace",
   "查看表格": "Show table",
   "时间": "Time",
   "近 24 小时本机没有这个账号的用量记录。": "No usage for this account on this computer in the last 24 hours.",
@@ -1385,7 +1387,8 @@ const EN: Record<string, string> = {
   "Grok 会话：~/.grok/config.toml 里没配中转地址就算官方账号。已计入 {n} 个会话。": "Grok sessions count as the official account when ~/.grok/config.toml has no relay address. {n} sessions included.",
   "百分比来自官方接口，AllAi 开着时每 5 分钟记一次（~/.allai/quota-history.json）；token 和花费来自本机 CLI 会话和 AllAi 的聊天记录。": "Percentages come from the official endpoints and are recorded every 5 minutes while AllAi is open (~/.allai/quota-history.json). Tokens and cost come from local CLI sessions and AllAi chat records.",
   "额度折合 = 这个窗口里用掉的量 ÷ 官方显示的已用百分比。已用越多越准；花费按各家 API 公开价估算，不是账单。": "Quota worth = usage in this window ÷ the used percentage shown by the provider. The more you have used, the more accurate it is. Cost is estimated from public API prices and is not a bill.",
-  "速度取「最近」和「整个窗口平均」里较快的一个，预警宁可偏早。": "The forecast uses the faster of the recent and whole-window rates, so warnings err on the early side.",
+  "预测按这周实际节奏（已用百分比 ÷ 已经过的时间），把休息算进去，不会假设你 24 小时不停用。":
+    "The forecast uses this week’s actual pace (used % ÷ elapsed time), so rest is included. It does not assume you run 24 hours a day.",
 };
 
 

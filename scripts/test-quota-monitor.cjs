@@ -4,7 +4,8 @@
  *   node scripts/test-quota-monitor.cjs
  *
  * 盯的都是「看起来算出来了、其实是错的」那种：
- *   - 速度取最近和平均里较快的 —— 睡一觉回来最近 6 小时是 0，不能因此说「永远用不完」；
+ *   - 预测用整周平均节奏（含休息），不把最近几小时的爆发当成 24 小时不停跑；
+ *   - 睡一觉回来最近 6 小时是 0，预测仍走平均，不能说「永远用不完」；
  *   - 窗口里百分比掉下来（重置 / 用了重置次数）之前的点不能算进速度；
  *   - 采样之后已经到点重置：按新窗口从 0 算，别拿上周的 95% 报警；
  *   - 已用不到 2% 不折算整窗额度（整数百分比误差太大）；
@@ -73,16 +74,16 @@ try {
     const w = report.week;
     check("最近 6 小时每小时涨 1 个点", near(w.recentPerH, 1), String(w.recentPerH));
     check("整个窗口平均 50% / 96 小时", near(w.averagePerH, 50 / 96), String(w.averagePerH));
-    check("预测用较快的那个速度", near(w.ratePerH, 1), String(w.ratePerH));
-    check("还差 50 个点 → 50 小时后用完", near(w.etaAt, NOW + 50 * HOUR_MS), iso(w.etaAt));
-    check("比重置（72 小时后）早，判成会提前用完", w.runsOutBeforeReset && report.health.reason === "runs-out", JSON.stringify(report.health));
-    check("重置时推算 50 + 72 = 122%", near(w.projectedAtReset, 122), String(w.projectedAtReset));
+    check("预测用平均节奏，不拿最近 1%/小时去 24 小时外推", near(w.ratePerH, 50 / 96), String(w.ratePerH));
+    check("重置时约 87.5%，不会说 50 小时后用完", near(w.projectedAtReset, 50 + (50 / 96) * 72) && !w.runsOutBeforeReset, `${w.projectedAtReset} ${w.etaAt}`);
+    check("87.5% 判成有点紧，不是会提前用完", report.health.reason === "tight", JSON.stringify(report.health));
     // 96 小时 × 100 万 = 9600 万 token，已用 50% → 整周 1.92 亿；花费同理 $96 → $192
     check(
       "折算整周额度 = 窗口用量 ÷ 已用百分比",
       near(w.capacity.tokens, 192_000_000) && near(w.capacity.costUsd, 192) && w.capacity.confidence === "high",
       JSON.stringify(w.capacity),
     );
+    check("24 小时都有用量时 activeShare 是 1", near(w.activeShare, 1), String(w.activeShare));
   }
 
   // ---- 2. 最近 6 小时没用，但整个窗口平均很快：不能说「用不完」 ----
@@ -90,7 +91,7 @@ try {
     const samples = [...hourlySamples(10, 50, 50)];
     const report = analyzeAccount("claude", samples, steadyRows(), NOW);
     const w = report.week;
-    check("最近是 0 时退回平均速度", near(w.recentPerH, 0) && near(w.ratePerH, 50 / 96), `${w.recentPerH} / ${w.ratePerH}`);
+    check("最近是 0 时预测仍走平均，不说用不完", near(w.recentPerH, 0) && near(w.ratePerH, 50 / 96), `${w.recentPerH} / ${w.ratePerH}`);
     check("重置时推算约 87.5%，判成有点紧", near(w.projectedAtReset, 50 + (50 / 96) * 72) && report.health.reason === "tight", `${w.projectedAtReset} ${report.health.reason}`);
   }
 
@@ -175,7 +176,22 @@ try {
     );
   }
 
-  // ---- 9. 采样器 ----
+  // ---- 9. 一天只用 8 小时：能看出休息，预测仍按墙上时钟平均 ----
+  {
+    const start = RESET - WEEK_MS;
+    const rows = [];
+    for (let hour = start; hour < NOW; hour += HOUR_MS) {
+      if (Math.floor(hour / HOUR_MS) % 24 < 8) {
+        rows.push({ hour, model: "claude-opus-5", tokens: 1_000_000, costUsd: 1, requests: 2 });
+      }
+    }
+    const report = analyzeAccount("claude", hourlySamples(10, 40, 50), rows, NOW);
+    const w = report.week;
+    check("大约三分之一的时间在用", near(w.activeShare, 32 / 96), String(w.activeShare));
+    check("有休息也不改用最近爆发去外推", near(w.ratePerH, 50 / 96) && !w.runsOutBeforeReset, String(w.ratePerH));
+  }
+
+  // ---- 10. 采样器 ----
   {
     const t0 = Date.UTC(2026, 8, 13, 0, 0, 0);
     const map = (week) => ({ claude: { name: "Claude 账号", weekPct: week, fiveHourPct: 5, weekReset: iso(t0 + WEEK_MS) } });
