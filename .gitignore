@@ -40,7 +40,8 @@ yarn-error.log*
 !.env.example
 
 # local chat data (if ALLAI_DATA_DIR points here)
-/data
+/data/*
+!/data/model-trace/
 
 # vercel
 .vercel

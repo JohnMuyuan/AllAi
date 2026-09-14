@@ -328,6 +328,14 @@ const AssistantBubble = memo(function AssistantBubble({
           <span className="size-1.5 animate-pulse rounded-full bg-muted [animation-delay:240ms]" />
         </div>
       ) : null}
+      {message.routeTrace?.mismatch ? (
+        <div className="mb-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[13px] leading-5 text-ink">
+          {t("这次回复的指纹不像 {expected}，更接近 {name}。", {
+            expected: message.routeTrace.expected,
+            name: message.routeTrace.predictedName,
+          })}
+        </div>
+      ) : null}
       {message.content ? (
         <Foldable text={message.content}>
           {(shown) => (

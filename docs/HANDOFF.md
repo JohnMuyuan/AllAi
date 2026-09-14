@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.17.0**，安装包 `dist/AllAi-Setup-0.17.0.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.1**，安装包 `dist/AllAi-Setup-0.17.1.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -14,12 +14,13 @@
 2. **交活前把下面「改完要跑的检查」四条全跑完。** tsc 和 eslint 都过不代表能跑 ——
    这个项目栽过好几次：客户端引服务端模块（整个界面白屏）、构建 OOM、CLI 参数互斥，
    全是只有真跑起来才暴露的。
-3. **「产品约定」那一节的 94 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
+3. **「产品约定」那一节的 100 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
    动到相关代码前先扫一遍。**约定 91–92 是 0.16.41 审查出来的，尤其要先看** ——
    那两条是同一类错误在两个地方各犯一次，代码里可能还有第三处。
    约定 93–94 是 0.16.42 的：**认牌子的规则和抓图标的顺序都只有一份，别抄第二份。**
    约定 95–97 是 0.16.43 的：**翻译只翻显示不翻数据；图标按「模型 → 接口 → 厂商」找；
    界面上拼出来的中文要先拆成模板和变量再翻。**
+   约定 100 是 0.17.1 的：**模型溯源只测 HTTP 的 OpenAI / Claude，官方 CLI 和操控电脑循环不测。**
 
 ---
 
@@ -59,6 +60,7 @@ node scripts/test-launch-env.cjs           # 动了 electron/launch.ts 的鉴权
 node scripts/test-i18n-ui.cjs              # 动了 lib/i18n.ts / lib/theme.ts / Agent 顶栏（要 dev server，见文件头）
 node scripts/test-quota-monitor.cjs        # 动了 lib/quota-monitor.ts / electron/quota-history.ts
 node scripts/test-quota-monitor-ui.cjs     # 动了 components/QuotaMonitor.tsx（要 dev server，见文件头）
+node scripts/test-model-trace.cjs          # 动了 lib/model-trace/
 node scripts/test-agent-session.cjs        # 动了换模型 / 交接压缩
 node scripts/test-cli-commands.cjs         # 动了 lib/cli-commands.ts
 ```
@@ -170,6 +172,7 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0 CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=500000 npm 
 - `conversations/<id>.json` + `conversations/index.json` —— 一条对话一个文件，侧栏列表读 index。见 `lib/conversations.ts`。老版本 db.json 里的对话首次启动自动搬过来。
 - `usage.json` —— token 用量流水，只增不删（设置里手动清空才会没）。见 `lib/usage-store.ts`，纯类型和汇总在 `lib/usage.ts`（界面也要 import，别把 fs 混进去）。
 - `history-cache.json` —— Agent 历史扫描的头部解析缓存，删了会自动重建。
+- `model-trace.json` —— 模型溯源探测记录，最多留 200 条。见 `lib/model-trace/store.ts`。
 - `uploads/`、`skills/`、`studio/`、`claude-chat/`、`grok-chat/`。
 
 本机 CLI（Agent / 官方聊天依赖它们）：
@@ -278,6 +281,27 @@ Claude `-p` + `stream-json` 必须带 `--verbose`，否则直接报错。Grok �
 额度接口的原始返回（结构，2026-09 实测）：Claude `five_hour` / `seven_day` 各有整数 `utilization` + `resets_at`，没有按型号拆的窗口（`seven_day_opus` 等都是 null）；ChatGPT `rate_limit.primary_window`（5 小时）/ `secondary_window`（7 天）各有 `used_percent`、`reset_at`（秒）、`limit_window_seconds`，外加 `plan_type`；Grok `config.currentPeriod.start/end` 直接给出周窗口起止。
 
 回归：`node scripts/test-quota-monitor.cjs`（计算 + 采样器）、`node scripts/test-usage-scan.cjs`（按小时 + 归属 + 老账升级）、`scripts/test-quota-monitor-ui.cjs`（界面，要 dev server，见文件头）。
+
+---
+
+## 模型溯源（0.17.1）
+
+设置 → 溯源。用 [ModelTrace](https://github.com/xqy2006/ModelTrace)（MIT）的数字指纹，探测 HTTP 接口上的 OpenAI / Claude 是不是被路由到别的型号。
+
+| 环节 | 位置 | 说明 |
+|------|------|------|
+| 指纹库 | `data/model-trace/unified_bank.json` | 13 个型号（gpt-5.4/5.5/5.6-sol\|terra\|luna、gpt-6-astra、haiku 4.5、sonnet 4.6/5、opus 4.6/4.7/4.8/5）。打包时 `next.config.ts` 的 `outputFileTracingIncludes` 要带上。 |
+| 算法 | `lib/model-trace/fingerprint.ts` | Hellinger + 有序块，校准温度按 1/2/3 条有效回答。 |
+| 挑战 | `lib/model-trace/challenges.ts` | 发给模型的整数生成提示词，**不要进 i18n**。 |
+| 判定 | `lib/model-trace/match.ts` | 只认 OpenAI / Claude；家族不同就算路由；库里对得上的型号在 p≥0.35 且 id 不同时算路由。指示灯：0% 绿、不到 20% 黄、20% 及以上红。 |
+| 探测 | `lib/model-trace/probe.ts` | 另发 HTTP 请求（不是拿那条聊天回复做指纹）。自动 1 条挑战，手动 3 条。官方 CLI / 没 Key 的不测。 |
+| 记录 | `~/.allai/model-trace.json` | 最多 200 条；占比看最近 50 条。 |
+| 接口 | `app/api/model-trace` | GET 概览、PATCH 开关、POST 探测。关了自动时 `source:"manual"` 仍可跑。 |
+| 界面 | `components/ModelTraceSettings.tsx` | 呼吸灯 + 说明 + 历史。聊天回复后 `ChatApp.runRouteTrace`；对不上时 Windows 通知 + 答案前黄条（`MessageList`）。 |
+
+自动探测挂在 HTTP 聊天 `send()` 流结束后，**操控电脑的循环步不测**（会每步多打一次贵的整数生成）。Agent 会话不测。官方登录聊天提前 return，到不了这条。
+
+回归：`node scripts/test-model-trace.cjs`。
 
 ---
 
@@ -594,13 +618,14 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
    预设模板（`lib/templates.ts`）的名称在**应用模板的那一刻**按当前语言写进表单 ——
    那是存进 db 的用户数据，之后就不再跟着界面语言变。
 97. **界面上拼出来的中文要先拆成「模板 + 变量」再翻。** `` `${limit.note}（估算）` `` 这种写法
-98. **额度监控的速度取「最近」和「整个窗口平均」里较快的那个，折算整窗额度要求已用 >= 2%。** 只看最近：睡一觉回来最近 6 小时是 0，会说「永远用不完」；只看平均又追不上突然猛用。Claude 的 utilization 是整数，1% 时折算误差能放大几十倍。窗口里百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算，别拿上周的 95% 报警。改口径先改 `scripts/test-quota-monitor.cjs`。
-99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
    拼出来的是个全新字符串，词典里永远对不上。改成 `t("{note}（估算）", { note: t(limit.note) })`
    这样两层：模板能翻，里面那段（数据表里的中文）也单独翻一次。
    `lib/context-window.ts` 的 `compactNotice` 就是照这个拆的（`COMPACT_NOTICE` + `compactNoticeVars`），
    服务端不知道界面语言，直接调 `compactNotice()` 拿中文；界面调 `t(COMPACT_NOTICE, vars)`。
    同理，新增带变量的文案时**别把数字拼进模板**。
+98. **额度监控的速度取「最近」和「整个窗口平均」里较快的那个，折算整窗额度要求已用 >= 2%。** 只看最近：睡一觉回来最近 6 小时是 0，会说「永远用不完」；只看平均又追不上突然猛用。Claude 的 utilization 是整数，1% 时折算误差能放大几十倍。窗口里百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算，别拿上周的 95% 报警。改口径先改 `scripts/test-quota-monitor.cjs`。
+99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
+100. **模型溯源只测 HTTP 的 OpenAI / Claude。** 官方 CLI 没有可单独打的 HTTP 指纹请求，不要去猜。自动探测是回复后再发一条整数生成挑战，**不是**拿那条聊天正文做指纹；操控电脑循环和 Agent 会话不要测。指纹库和算法来自 ModelTrace，挑战原文发给模型，不要进 i18n。`gpt-5` 这种对不上指纹库的型号只比家族，禁止用双向 `includes` 去撞 `gpt-5.4`。
 
 ---
 
@@ -612,7 +637,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `components/I18n.tsx` | 界面语言上下文：`useT()` / `LangProvider`，挂在 page 最外层 |
 | `lib/i18n.ts` | 中文原文当 key 的词典；语言存 `allai-lang` |
 | `components/ChatApp.tsx` | 聊天/Agent/创作总控，发送分支 |
-| `components/SettingsDialog.tsx` | 设置外壳 + 标签页（通用/聊天/Agent/生图/Skills/用量） |
+| `components/SettingsDialog.tsx` | 设置外壳 + 标签页（通用/模型与接口/Skills/用量/额度监控/溯源/远程/关于） |
 | `components/AgentSettingsDialog.tsx` | 单个 Agent 的接口/登录/同步模型 |
 | `components/GlobalEndpoints.tsx` | 全局提供商池的编辑界面（`/api/agent-endpoints`） |
 | `components/TitleBar.tsx` | 自己的标题栏（窗口是 `frame: false`） |
@@ -651,6 +676,10 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `components/ConfirmDialog.tsx` | 自己的确认弹窗，**不许再用 window.confirm** |
 | `electron/agent-tools.ts` | **工具调用翻译成人话**，三家共用。放 electron/ 是 rootDir 限制 |
 | `components/UsageStats.tsx` | 设置里的「使用统计」页，折线图是手写 SVG |
+| `components/ModelTraceSettings.tsx` | 设置 → 溯源：呼吸灯、开关、手动探测、历史 |
+| `lib/model-trace/` | 指纹 / 挑战 / 判定 / 探测 / 落盘。`store` 和 `probe` 是服务端专用 |
+| `app/api/model-trace/` | 溯源 GET/PATCH/POST |
+| `data/model-trace/unified_bank.json` | ModelTrace 指纹库，随软件带上 |
 | `components/StatsBar.tsx` | 输入框下面那行调试信息 |
 | `components/GeneralSettings.tsx` | 设置 →「通用」：统计行、联网、模型图标 |
 | `lib/studio.ts` | 创作对话的标题、预览、旧 job 迁到 conversation |
@@ -776,11 +805,13 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.17.0**，安装包 `dist/AllAi-Setup-0.17.0.exe`，桌面快捷方式已更新。
+当前发版 **0.17.1**，安装包 `dist/AllAi-Setup-0.17.1.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
-**最近刚做完（0.17.0）：** 设置里新增「额度监控」专区：官方额度每 5 分钟采样，算消耗速度、预计用完时间、整周额度折合多少 token / 美元、每小时消耗和型号占比。本机 CLI 用量扫描顺带改成按小时记账、按会话判断走不走官方账号。见「额度监控」一节和约定 98、99。
+**最近刚做完（0.17.1）：** 设置里新增「溯源」专区。HTTP 的 OpenAI / Claude 每条聊天回复后用 ModelTrace 指纹再打一次探测；对不上会发系统通知，并在答案前加黄条。绿灯 0%、黄灯不到 20%、红灯 20% 及以上。可关自动探测，也可手动测三次。官方 CLI、操控电脑循环、Agent 不测。见「模型溯源」一节和约定 100。
+
+**更早（0.17.0）：** 设置里新增「额度监控」专区：官方额度每 5 分钟采样，算消耗速度、预计用完时间、整周额度折合多少 token / 美元、每小时消耗和型号占比。本机 CLI 用量扫描顺带改成按小时记账、按会话判断走不走官方账号。见「额度监控」一节和约定 98、99。
 
 **更早（0.16.48）：** 模型折叠含添加框和思考档位；AllAi 发消息会打进用户已开的 Claude/Grok 终端（`electron/cli-inject.ts`，pid 来自登记表，不扫进程名）。Codex 没有 pid 登记，仍走 AllAi 自己 spawn。
 

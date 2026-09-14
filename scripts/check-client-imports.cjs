@@ -12,7 +12,8 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 // 这些模块只能在服务端用（API 路由、其它服务端模块）。
 const SERVER_ONLY = ["lib/store", "lib/compact", "lib/conversations", "lib/uploads",
-  "lib/usage-store", "lib/scan-suppliers", "lib/paths", "lib/title", "lib/chat-context"];
+  "lib/usage-store", "lib/scan-suppliers", "lib/paths", "lib/title", "lib/chat-context",
+  "lib/model-trace/store", "lib/model-trace/probe"];
 
 function walk(dir, out = []) {
   for (const name of fs.readdirSync(dir)) {
@@ -26,7 +27,7 @@ function walk(dir, out = []) {
 const bad = [];
 for (const file of walk(path.join(ROOT, "components"))) {
   const src = fs.readFileSync(file, "utf8");
-  for (const hit of src.matchAll(/from\s+"(@\/lib\/[\w-]+)"/g)) {
+  for (const hit of src.matchAll(/from\s+"(@\/lib\/[\w-]+(?:\/[\w-]+)*)"/g)) {
     const mod = hit[1].replace("@/", "");
     // `import type` 只是类型，编译后会被抹掉，不进包。
     const line = src.slice(0, hit.index).split("\n").pop() || "";

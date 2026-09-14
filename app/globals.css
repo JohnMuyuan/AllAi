@@ -40,6 +40,17 @@ html.dark .brand-invert {
   filter: invert(1);
 }
 
+@keyframes trace-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.07); opacity: 0.82; }
+}
+.trace-lamp {
+  animation: trace-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-lamp { animation: none; }
+}
+
 html.dark {
   color-scheme: dark;
   --canvas: #09090b;

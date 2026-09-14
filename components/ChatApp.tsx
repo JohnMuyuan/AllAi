@@ -42,6 +42,7 @@ import { applyTheme, readThemeMode, saveThemeMode, watchSystemTheme, type ThemeM
 import { type LangMode } from "@/lib/i18n";
 import { useLang, useLangState, useT } from "./I18n";
 import { firstModelKey, parseModelKey, titleFrom } from "@/lib/public";
+import { traceFamily } from "@/lib/model-trace/match";
 import { readSse } from "@/lib/sse-client";
 import { permissionOptions, resolvePermission } from "@/lib/permission-mode";
 import { agentContinueSession, agentModelSwitched, PENDING_SESSION_MODEL } from "@/lib/agent-session";
@@ -260,7 +261,7 @@ export function ChatApp() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<
-    "chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" | "remote" | "about"
+    "chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" | "remote" | "about" | "trace"
   >("chat");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -427,7 +428,17 @@ export function ChatApp() {
   const [officialBusy, setOfficialBusy] = useState<OfficialChatKind | null>(null);
 
   function openSettings(
-    tab: "chat" | "agents" | "imagine" | "skills" | "usage" | "quota" | "general" = "chat",
+    tab:
+      | "chat"
+      | "agents"
+      | "imagine"
+      | "skills"
+      | "usage"
+      | "quota"
+      | "general"
+      | "remote"
+      | "about"
+      | "trace" = "chat",
     agentId?: string,
   ) {
     setSettingsTab(tab);
@@ -455,6 +466,58 @@ export function ChatApp() {
   const quotaMarkRef = useRef<Record<string, { five: number; week: number }>>({});
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
+
+  function runRouteTrace(conversationId: string, messageId: string, modelKeyValue: string) {
+    if (prefsRef.current.modelTraceEnabled === false) return;
+    const { providerId, modelId } = parseModelKey(modelKeyValue);
+    if (!providerId || !modelId || !traceFamily(modelId)) return;
+    void fetch("/api/model-trace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        providerId,
+        modelId,
+        conversationId,
+        messageId,
+        queries: 1,
+        source: "auto",
+      }),
+    })
+      .then(async (response) => {
+        const data = (await response.json()) as {
+          record?: {
+            mismatch: boolean;
+            expected: string;
+            predictedName: string;
+            predicted: string;
+            family: string;
+            probability: number;
+          };
+        };
+        const record = data.record;
+        if (!record) return;
+        setActive((prev) => {
+          if (!prev || prev.id !== conversationId) return prev;
+          return {
+            ...prev,
+            messages: prev.messages.map((item) =>
+              item.id === messageId ? { ...item, routeTrace: record } : item,
+            ),
+          };
+        });
+        if (record.mismatch) {
+          void getDesktop()?.notify?.({
+            title: t("模型被路由"),
+            body: t("选的是 {expected}，指纹更像 {name}", {
+              expected: record.expected,
+              name: record.predictedName,
+            }),
+            evenIfFocused: true,
+          });
+        }
+      })
+      .catch(() => undefined);
+  }
 
   const loadUsage = useCallback(async () => {
     const response = await fetch("/api/usage");
@@ -1791,6 +1854,9 @@ ${built.summary}`,
       setStreaming(false);
       abortRef.current = null;
       await loadConversations().catch(() => undefined);
+    }
+    if (conversationId && assistantMessageId && replyText && !override?.computerRun) {
+      void runRouteTrace(conversationId, assistantMessageId, key);
     }
     return { text: replyText, assistantMessageId, conversationId };
   }

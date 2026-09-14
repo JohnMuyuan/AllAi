@@ -4,7 +4,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Turbopack's route runtime is loaded dynamically and can be missed by tracing.
   outputFileTracingIncludes: {
-    "/*": ["./node_modules/next/dist/compiled/next-server/*.runtime.prod.js"],
+    "/*": [
+      "./node_modules/next/dist/compiled/next-server/*.runtime.prod.js",
+      "./data/model-trace/**/*",
+    ],
   },
   // Desktop resources are copied separately; never trace previous packages into the server.
   // `/*` 只匹配一层，像 `/page` 这种顶层入口漏不掉，但再深一层的就漏了；

@@ -62,6 +62,8 @@ export type AppPrefs = {
   notifyAgentDone: boolean;
   /** 官方额度到 80% / 90% 时提醒。 */
   notifyQuota: boolean;
+  /** 聊天回复后探测 OpenAI / Claude 是否被路由到别的型号。 */
+  modelTraceEnabled: boolean;
 };
 
 export const DEFAULT_REASONING = "medium";
@@ -163,6 +165,15 @@ export type ChatMessage = {
   computerRun?: string;
   /** 这一轮里用户真正打的那句话。只在该轮第一条用户消息上有。 */
   computerGoal?: string;
+  /** 这一轮指纹探测：被路由到别的型号时界面在答案前加提醒。 */
+  routeTrace?: {
+    expected: string;
+    predicted: string;
+    predictedName: string;
+    family: string;
+    probability: number;
+    mismatch: boolean;
+  };
   createdAt: number;
 };
 
@@ -335,6 +346,7 @@ export const emptyPrefs = (): AppPrefs => ({
   computerMaxSteps: 15,
   notifyAgentDone: true,
   notifyQuota: true,
+  modelTraceEnabled: true,
   brandIcons: {},
   webSearchChat: false,
   webSearchAgent: true,
