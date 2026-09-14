@@ -44,6 +44,13 @@ import {
 } from "./pty";
 import { initRemote, stopRemote } from "./remote";
 import { cliUpdateState, initCliUpdate, setCliAutoUpdate, updateClis } from "./cli-update";
+import {
+  appUpdateState,
+  checkAppUpdate,
+  initAppUpdate,
+  installAppUpdate,
+  setAppAutoUpdate,
+} from "./app-update";
 import { scanLocalUsage } from "./usage-scan";
 import { importCcSwitch, previewCcSwitch } from "./cc-switch";
 import { setNotifyWindow, showNotice, windowFocused } from "./notify";
@@ -281,6 +288,11 @@ function registerIpc() {
     doImport ? importCcSwitch() : previewCcSwitch(),
   );
   ipcMain.handle("cli:auto-update", (_event, value: boolean) => setCliAutoUpdate(Boolean(value)));
+  // 设置 → 关于：更新 AllAi 自己。真正干活在 app-update.ts，这里只转发。
+  ipcMain.handle("app:update-check", () => checkAppUpdate());
+  ipcMain.handle("app:update-state", () => appUpdateState());
+  ipcMain.handle("app:update-install", () => installAppUpdate());
+  ipcMain.handle("app:auto-update", (_event, value: boolean) => setAppAutoUpdate(Boolean(value)));
   ipcMain.handle("dialog:folder", async () => {
     const options = {
       title: "选择工作目录",
@@ -431,6 +443,10 @@ if (!gotLock) {
     // 开着「启动时自动更新」就在后台把本机 CLI 都更新一遍（等 20 秒，别和启动抢资源）。
     initCliUpdate((state) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("cli:update-state", state);
+    });
+    // AllAi 自己：启动 30 秒后查一次新版本，查到就地后台下载（见 app-update.ts）。
+    initAppUpdate((state) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("app:update-state", state);
     });
     try {
       await createWindow();

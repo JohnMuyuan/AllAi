@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.17.3**，安装包 `dist/AllAi-Setup-0.17.3.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.4**，安装包 `dist/AllAi-Setup-0.17.4.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -9,18 +9,23 @@
    `C:\Users\7ipny\Desktop\AllAi.lnk`，不是 `next dev`。**只改源码不打包，用户看不见。**
    改完必须：`Stop-Process -Name AllAi -Force`（若在运行）→ `npm run dist` →
    让用户**完全退出**再从快捷方式打开。
-   **打完包还要把源码 push 到 GitHub，安装包发 Release**（tag `vX.Y.Z`，附件
-   `dist/AllAi-Setup-X.Y.Z.exe`）。仓库保持私有；`dist/` 不进 git。
+   **打完包还要把源码 push 到 GitHub，安装包发 Release**（tag `vX.Y.Z`）。仓库现在是
+   **公开**的（用户 0.17.4 时自己公开的），App 靠它做自动更新，所以附件**必须**有这三个：
+   `dist/AllAi-Setup-X.Y.Z.exe`、`dist/latest.yml`、`dist/AllAi-Setup-X.Y.Z.exe.blockmap`
+   —— 少一个，装好的人就更新不动（`latest.yml` 是版本号来源，blockmap 是差分下载用的）。
+   **推之前扫一遍 diff 有没有 Key / token / 服务器地址**；`dist/` 不进 git。
 2. **交活前把下面「改完要跑的检查」四条全跑完。** tsc 和 eslint 都过不代表能跑 ——
    这个项目栽过好几次：客户端引服务端模块（整个界面白屏）、构建 OOM、CLI 参数互斥，
    全是只有真跑起来才暴露的。
-3. **「产品约定」那一节的 100 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
+3. **「产品约定」那一节的 101 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
    动到相关代码前先扫一遍。**约定 91–92 是 0.16.41 审查出来的，尤其要先看** ——
    那两条是同一类错误在两个地方各犯一次，代码里可能还有第三处。
    约定 93–94 是 0.16.42 的：**认牌子的规则和抓图标的顺序都只有一份，别抄第二份。**
    约定 95–97 是 0.16.43 的：**翻译只翻显示不翻数据；图标按「模型 → 接口 → 厂商」找；
    界面上拼出来的中文要先拆成模板和变量再翻。**
    约定 100 是 0.17.2 的：**模型溯源测 OpenAI / Claude；HTTP 走 Key，官方 Claude / ChatGPT 走本机 CLI。**
+   约定 101 是 0.17.4 的：**AllAi 自己的更新是 `electron/app-update.ts`，和本机 CLI 更新两回事；
+   发版附件少了 `latest.yml` 谁也更新不动。**
 
 ---
 
@@ -37,7 +42,7 @@
 - **动手前不用问太多**，方案一般直接授权（「具体方案和制作还是得麻烦你了」）。
   但方案定了要先用两三句说清楚再写代码。
 - 每一轮功能做完的固定动作：版本号 +1 → 写 `CHANGELOG.md` → 更新本文件 → `npm run dist` →
-  源码 push 到 `JohnMuyuan/AllAi`，安装包发 GitHub Release。
+  源码 push 到 `JohnMuyuan/AllAi`，安装包发 GitHub Release（附件三个都要，见上面第 1 条）。
   用户会立刻从快捷方式打开验收。
 
 ---
@@ -63,6 +68,7 @@ node scripts/test-quota-monitor-ui.cjs     # 动了 components/QuotaMonitor.tsx�
 node scripts/test-model-trace.cjs          # 动了 lib/model-trace/
 node scripts/test-agent-session.cjs        # 动了换模型 / 交接压缩
 node scripts/test-cli-commands.cjs         # 动了 lib/cli-commands.ts
+node scripts/test-app-update.cjs           # 动了 electron/app-update.ts（要先 npm run electron:compile）
 ```
 
 `check-client-imports` 已经挂在 `npm run build` 和 `npm run dist` 前面了。
@@ -629,6 +635,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 98. **额度监控的预测用整段窗口平均节奏（已用% ÷ 已经过的墙上时钟小时），折算整窗额度要求已用 >= 2%。** 休息已经在分母里，禁止把最近几小时的爆发当成接下来 24 小时不停跑。最近速度只展示；睡一觉回来最近是 0，预测仍走平均，不会说「永远用不完」。Claude 的 utilization 是整数，1% 时折算误差能放大几十倍。窗口里百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算，别拿上周的 95% 报警。改口径先改 `scripts/test-quota-monitor.cjs`。
 99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
 100. **模型溯源测 OpenAI / Claude：HTTP 走 Key，官方登录走本机 CLI。** 自动探测是回复后再发一条整数生成挑战，**不是**拿那条聊天正文做指纹。官方 Claude / ChatGPT 用 `official-probe` 在 `~/.allai/model-trace/` 开一轮 print，不要 resume 用户的聊天会话，也不要进 Agent 列表。Grok 指纹库没有，不测。操控电脑循环和 Agent 会话不要测。挑战原文发给模型，不要进 i18n。`gpt-5` 这种对不上指纹库的型号只比家族，禁止用双向 `includes` 去撞 `gpt-5.4`。
+101. **AllAi 自己的更新走 `electron/app-update.ts`（electron-updater），和本机 CLI 的更新（约定 57）是两回事，别混。** 更新源是 GitHub Release，仓库地址不写在代码里 —— electron-builder 打包时把 git remote 的 owner/repo 写进 `resources/app-update.yml`，electron-updater 自己读。**发版附件必须有 `latest.yml` 和 `.blockmap`**，少了 `latest.yml` 谁也更新不动。查到就地后台下载（`autoDownload = false`，我们自己在 `update-available` 里下），**默认不打断用户**：下好了退出时自动装（`autoInstallOnAppQuit`），设置 → 关于里能立刻重启。状态一律写在界面上，**不弹窗**（约定 22）。持久化只留 `latest` / `error` / `downloaded` 三种状态，`checking` / `downloading` 是这一轮的临时状态，重启不许接着显示。测试用 `ALLAI_UPDATE_FEED` 换源，别在测试里连真 GitHub。回归 `scripts/test-app-update.cjs`。
 
 ---
 
@@ -718,6 +725,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `components/FileChanges.tsx` | Agent 回复下面「改了哪些文件 +N −M」和展开的差异 |
 | `electron/diff.ts` | 从三家会话记录里解析改文件的差异，`elideOldDiffs` 控制体积 |
 | `electron/cli-update.ts` / `components/AboutSettings.tsx` | 设置 → 关于：本机 CLI 列表、手动 / 启动自动更新 |
+| `electron/app-update.ts` | AllAi **自己**的更新（和上面那条是两回事）：查 GitHub Release、后台下载、退出时装 |
 | `electron/remote.ts` | 远程控制（电脑端），见「远程控制」一节 |
 | `components/useRemoteControl.ts` | 远程控制（界面侧） |
 | `mobile/` / `relay/` | 手机网页 / 中继（`npm run remote:build`） |
@@ -808,11 +816,17 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.17.3**，安装包 `dist/AllAi-Setup-0.17.3.exe`，桌面快捷方式已更新。
+当前发版 **0.17.4**，安装包 `dist/AllAi-Setup-0.17.4.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
-**最近刚做完（0.17.3）：** 额度监控不再把最近几小时的爆发拉成 24 小时不停跑的直线。预测改成「这周已用百分比 ÷ 已经过的时间」，休息算进分母。虚线和告警都走这条。见约定 98。
+**仓库已经公开（0.17.4 时用户自己公开的）**，为的是让 App 走 GitHub Release 自动更新。公开前扫过一遍：14 个提交的完整历史里没有 Key / token / 服务器地址，`.env`、`relay-deploy.env`、`dist/` 都没进 git。留在仓库里的个人信息只有第三方网关域名 `ai.yp.mk`（`CHANGELOG.md`、本文件、`lib/imagine.ts` 的注释里各一处，只有主机名没带 Key）。**以后往仓库里加东西先扫一遍再说。**
+
+**最近刚做完（0.17.4）：** AllAi 自己能更新自己了。`electron/app-update.ts` 用 electron-updater 查 GitHub Release，查到就地后台下载（差分），**退出时自动装**，下次打开就是新版本；设置 → 关于里能手动查、能立刻重启、能关。见约定 101 和「改完要跑的检查」里的 `test-app-update.cjs`。
+
+**还没验证的（0.17.4）：** 真连 GitHub 的「查 → 下载 → 退出时装」整条链路要等线上有比装着的新版本才跑得到，只验到「装了 0.17.4 之后能查到线上 0.17.4、判定为最新」和本地假源的下载。首次真更新（0.17.4 → 0.17.5）时**盯一眼** `~/.allai/desktop.log` 里的 `[update]` 行和 `%LOCALAPPDATA%\allai-updater`。
+
+**更早（0.17.3）：** 额度监控不再把最近几小时的爆发拉成 24 小时不停跑的直线。预测改成「这周已用百分比 ÷ 已经过的时间」，休息算进分母。虚线和告警都走这条。见约定 98。
 
 **更早（0.17.2）：** 官方登录的 Claude / ChatGPT 也能做模型溯源，走本机 CLI 打数字挑战（吃一点订阅额度），不需要 API Key。手动检测列表会列出 Claude 账号和 ChatGPT 账号。Grok 库里没有，仍不测。见「模型溯源」一节和约定 100。
 

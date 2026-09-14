@@ -112,6 +112,16 @@ contextBridge.exposeInMainWorld("allaiDesktop", {
     ipcRenderer.on("cli:update-state", listener);
     return () => ipcRenderer.removeListener("cli:update-state", listener);
   },
+  /** AllAi 自己的更新。查到的版本在后台下载，退出时自动装。 */
+  appUpdateCheck: () => ipcRenderer.invoke("app:update-check"),
+  appUpdateState: () => ipcRenderer.invoke("app:update-state"),
+  appInstallUpdate: () => ipcRenderer.invoke("app:update-install"),
+  appSetAutoUpdate: (value: boolean) => ipcRenderer.invoke("app:auto-update", value),
+  onAppUpdateState: (cb: (state: unknown) => void) => {
+    const listener = (_event: unknown, state: unknown) => cb(state);
+    ipcRenderer.on("app:update-state", listener);
+    return () => ipcRenderer.removeListener("app:update-state", listener);
+  },
   onChat: (cb: (sessionId: string, event: unknown) => void) => {
     const listener = (_event: unknown, sessionId: string, event: unknown) => cb(sessionId, event);
     ipcRenderer.on("agent:event", listener);

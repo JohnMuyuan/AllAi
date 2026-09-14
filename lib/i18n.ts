@@ -165,6 +165,26 @@ const EN: Record<string, string> = {
   "确定": "OK",
   "版本": "Version",
 
+  /* 关于：AllAi 自己的更新（electron/app-update.ts） */
+  "AllAi 更新": "AllAi updates",
+  "检查更新": "Check for updates",
+  "正在检查…": "Checking…",
+  "正在检查更新…": "Checking for updates…",
+  "已是最新版本。": "You're up to date.",
+  "发现新版本 {v}，正在后台下载…": "Version {v} found — downloading in the background…",
+  "正在下载 {v}（{n}%）": "Downloading {v} ({n}%)",
+  "{v} 已下载，退出 AllAi 时会自己装上。": "Version {v} downloaded. It installs itself when you quit AllAi.",
+  "检查更新失败。": "Update check failed.",
+  "上次检查：{when}": "Last checked: {when}",
+  "还没检查过。": "Not checked yet.",
+  "这个版本不能自动更新（开发模式），请手动装新版本。":
+    "This build can't update itself (development mode) — install a new version manually.",
+  "立即重启并安装": "Restart and install",
+  "启动时自动检查更新": "Check for updates on startup",
+  "在后台下载，不影响使用。下好后退出 AllAi 会自动装上，下次打开就是新版本。":
+    "Downloads in the background. It installs itself when you quit, so the next launch is already the new version.",
+  "只有桌面版能检查更新。": "Only the desktop app can check for updates.",
+
   /* 外观与语言（这一版新加的） */
   "外观": "Appearance",
   "日间": "Light",

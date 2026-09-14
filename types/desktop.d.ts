@@ -103,6 +103,28 @@ export type CliUpdateState = {
   >;
 };
 
+/** AllAi 自己的更新状态。`detail` 是原始报错，不翻译，原样小字显示。 */
+export type AppUpdateStatus =
+  | "unsupported"
+  | "idle"
+  | "checking"
+  | "latest"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "error";
+
+export type AppUpdateState = {
+  autoUpdate: boolean;
+  status: AppUpdateStatus;
+  /** 现在装着的版本。 */
+  current: string;
+  version?: string;
+  percent?: number;
+  detail?: string;
+  at?: number;
+};
+
 export type OfficialChatKind = "claude" | "grok" | "chatgpt";
 
 export type OfficialQuota = {
@@ -278,6 +300,13 @@ export type AllAiDesktop = {
   cliUpdateState: () => Promise<CliUpdateState>;
   cliSetAutoUpdate: (value: boolean) => Promise<CliUpdateState>;
   onCliUpdateState: (cb: (state: CliUpdateState) => void) => () => void;
+  /** 检查 AllAi 自己的新版本。查到会在后台下载，退出时自动装上。 */
+  appUpdateCheck: () => Promise<AppUpdateState>;
+  appUpdateState: () => Promise<AppUpdateState>;
+  /** 下好了才会真重启：装新版本并把 AllAi 拉起来。 */
+  appInstallUpdate: () => Promise<AppUpdateState>;
+  appSetAutoUpdate: (value: boolean) => Promise<AppUpdateState>;
+  onAppUpdateState: (cb: (state: AppUpdateState) => void) => () => void;
   remoteConfig: () => Promise<RemoteConfig>;
   remoteStatus: () => Promise<RemoteStatus>;
   remoteLog: () => Promise<{ at: number; device: string; action: string }[]>;
