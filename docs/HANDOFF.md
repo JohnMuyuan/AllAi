@@ -46,6 +46,8 @@
 - 每一轮功能做完的固定动作：版本号 +1 → 写 `CHANGELOG.md` → 更新本文件 → `npm run dist` →
   源码 push 到 `JohnMuyuan/AllAi`，安装包发 GitHub Release（附件三个都要，见上面第 1 条）。
   用户会立刻从快捷方式打开验收。
+- **提交说明里不许带对话链接。** 不要写 `Claude-Session:`、`https://claude.ai/code/session_…`，
+  也不要 `Co-Authored-By: Claude`。仓库是公开的，链接等于把会话地址挂在网上。
 
 ---
 
