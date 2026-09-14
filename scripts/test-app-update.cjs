@@ -210,7 +210,11 @@ async function it(name, fn) {
     update.installAppUpdate();
     await settle(); // quitAndInstall 是 setImmediate 里调的，等它落地
     assert.equal(calls.installs.length, 1, "下好了才装");
-    assert.deepEqual(calls.installs[0], [false, true], "第二个参数要是 true：装完把 AllAi 拉起来");
+    assert.deepEqual(
+      calls.installs[0],
+      [true, true],
+      "第一个参数必须是 true（静默安装：安装包带向导，自动更新不能弹出来）；第二个是装完把 AllAi 拉起来",
+    );
   });
 
   await it("关掉自动检查会存下来，下次启动还认", async () => {

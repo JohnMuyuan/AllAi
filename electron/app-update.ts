@@ -164,8 +164,9 @@ function onNotAvailable() {
 export function installAppUpdate() {
   if (state.status !== "downloaded") return { ...state };
   logLine("[update] 重启安装新版本");
-  // 第二个参数是「装完把 AllAi 再拉起来」。
-  setImmediate(() => autoUpdater.quitAndInstall(false, true));
+  // 第一个参数必须 true：安装包是带向导的（选目录、选快捷方式），
+  // 静默才会跳过所有页面直接装。第二个是「装完把 AllAi 再拉起来」。
+  setImmediate(() => autoUpdater.quitAndInstall(true, true));
   return { ...state };
 }
 

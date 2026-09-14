@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.17.4**，安装包 `dist/AllAi-Setup-0.17.4.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.5**，安装包 `dist/AllAi-Setup-0.17.5.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -17,7 +17,7 @@
 2. **交活前把下面「改完要跑的检查」四条全跑完。** tsc 和 eslint 都过不代表能跑 ——
    这个项目栽过好几次：客户端引服务端模块（整个界面白屏）、构建 OOM、CLI 参数互斥，
    全是只有真跑起来才暴露的。
-3. **「产品约定」那一节的 101 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
+3. **「产品约定」那一节的 102 条是用户反复强调过、或踩坑踩出来的**，不是风格偏好。
    动到相关代码前先扫一遍。**约定 91–92 是 0.16.41 审查出来的，尤其要先看** ——
    那两条是同一类错误在两个地方各犯一次，代码里可能还有第三处。
    约定 93–94 是 0.16.42 的：**认牌子的规则和抓图标的顺序都只有一份，别抄第二份。**
@@ -26,6 +26,8 @@
    约定 100 是 0.17.2 的：**模型溯源测 OpenAI / Claude；HTTP 走 Key，官方 Claude / ChatGPT 走本机 CLI。**
    约定 101 是 0.17.4 的：**AllAi 自己的更新是 `electron/app-update.ts`，和本机 CLI 更新两回事；
    发版附件少了 `latest.yml` 谁也更新不动。**
+   约定 102 是 0.17.5 的：**安装包是向导，但自动更新必须静默（`quitAndInstall(true, …)`）——
+   非静默会让每次自动更新都在用户面前弹一遍安装向导。**
 
 ---
 
@@ -636,6 +638,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
 100. **模型溯源测 OpenAI / Claude：HTTP 走 Key，官方登录走本机 CLI。** 自动探测是回复后再发一条整数生成挑战，**不是**拿那条聊天正文做指纹。官方 Claude / ChatGPT 用 `official-probe` 在 `~/.allai/model-trace/` 开一轮 print，不要 resume 用户的聊天会话，也不要进 Agent 列表。Grok 指纹库没有，不测。操控电脑循环和 Agent 会话不要测。挑战原文发给模型，不要进 i18n。`gpt-5` 这种对不上指纹库的型号只比家族，禁止用双向 `includes` 去撞 `gpt-5.4`。
 101. **AllAi 自己的更新走 `electron/app-update.ts`（electron-updater），和本机 CLI 的更新（约定 57）是两回事，别混。** 更新源是 GitHub Release，仓库地址不写在代码里 —— electron-builder 打包时把 git remote 的 owner/repo 写进 `resources/app-update.yml`，electron-updater 自己读。**发版附件必须有 `latest.yml` 和 `.blockmap`**，少了 `latest.yml` 谁也更新不动。查到就地后台下载（`autoDownload = false`，我们自己在 `update-available` 里下），**默认不打断用户**：下好了退出时自动装（`autoInstallOnAppQuit`），设置 → 关于里能立刻重启。状态一律写在界面上，**不弹窗**（约定 22）。持久化只留 `latest` / `error` / `downloaded` 三种状态，`checking` / `downloading` 是这一轮的临时状态，重启不许接着显示。测试用 `ALLAI_UPDATE_FEED` 换源，别在测试里连真 GitHub。回归 `scripts/test-app-update.cjs`。
+102. **安装包是向导（`oneClick: false` + `allowToChangeInstallationDirectory` + `packaging/installer.nsh`），但自动更新必须静默。** 安装包会让用户选装给谁、装到哪、要不要快捷方式；更新时绝对不能再弹这个向导 —— 所以 `quitAndInstall` 第一个参数（isSilent）**必须是 true**，它会给安装包传 `/S --updated`，assisted 模板的 `skipPageIfUpdated` 会跳过所有页面。改这个参数前先想一遍：非静默 = 每次自动更新都在用户面前弹一遍向导。`packaging/installer.nsh` 里那句「`$launchLink` 删了开始菜单链接要指回 exe」也别删：完成页的「运行」和更新的 `--force-run` 都靠它，指错了更新完起不来。**写那个文件记住它在生成脚本最前面被 include**，`${if}` / `${NSD_*}` 那时还没定义，所以函数必须写在宏体里（`!macro customPageAfterChangeDir` 内），写顶层会 `!include: error in script`。
 
 ---
 
@@ -726,6 +729,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `electron/diff.ts` | 从三家会话记录里解析改文件的差异，`elideOldDiffs` 控制体积 |
 | `electron/cli-update.ts` / `components/AboutSettings.tsx` | 设置 → 关于：本机 CLI 列表、手动 / 启动自动更新 |
 | `electron/app-update.ts` | AllAi **自己**的更新（和上面那条是两回事）：查 GitHub Release、后台下载、退出时装 |
+| `packaging/installer.nsh` | 安装向导里「快捷方式」那一页（`build.nsis.include`）。改之前先看约定 102 |
 | `electron/remote.ts` | 远程控制（电脑端），见「远程控制」一节 |
 | `components/useRemoteControl.ts` | 远程控制（界面侧） |
 | `mobile/` / `relay/` | 手机网页 / 中继（`npm run remote:build`） |
@@ -816,15 +820,38 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.17.4**，安装包 `dist/AllAi-Setup-0.17.4.exe`，桌面快捷方式已更新。
+当前发版 **0.17.5**，安装包 `dist/AllAi-Setup-0.17.5.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
 **仓库已经公开（0.17.4 时用户自己公开的）**，为的是让 App 走 GitHub Release 自动更新。公开前扫过一遍：14 个提交的完整历史里没有 Key / token / 服务器地址，`.env`、`relay-deploy.env`、`dist/` 都没进 git。留在仓库里的个人信息只有第三方网关域名 `ai.yp.mk`（`CHANGELOG.md`、本文件、`lib/imagine.ts` 的注释里各一处，只有主机名没带 Key）。**以后往仓库里加东西先扫一遍再说。**
 
-**最近刚做完（0.17.4）：** AllAi 自己能更新自己了。`electron/app-update.ts` 用 electron-updater 查 GitHub Release，查到就地后台下载（差分），**退出时自动装**，下次打开就是新版本；设置 → 关于里能手动查、能立刻重启、能关。见约定 101 和「改完要跑的检查」里的 `test-app-update.cjs`。
+**最近刚做完（0.17.5）：** 安装包从「双击就装」改成向导：选装给谁、选目录、两个快捷方式勾选框、完成页可勾「运行 AllAi」。自动更新仍然静默，不会弹向导。见约定 102。
 
-**还没验证的（0.17.4）：** 真连 GitHub 的「查 → 下载 → 退出时装」整条链路要等线上有比装着的新版本才跑得到，只验到「装了 0.17.4 之后能查到线上 0.17.4、判定为最新」和本地假源的下载。首次真更新（0.17.4 → 0.17.5）时**盯一眼** `~/.allai/desktop.log` 里的 `[update]` 行和 `%LOCALAPPDATA%\allai-updater`。
+**更早（0.17.4）：** AllAi 自己能更新自己了。`electron/app-update.ts` 用 electron-updater 查 GitHub Release，查到就地后台下载（差分），**退出时自动装**，下次打开就是新版本；设置 → 关于里能手动查、能立刻重启、能关。见约定 101 和「改完要跑的检查」里的 `test-app-update.cjs`。
+
+**还没验证的（0.17.4 / 0.17.5）：** 真连 GitHub 的「查 → 下载 → 退出时装」整条链路要等线上有比装着的新版本才跑得到，只验到「装了 0.17.4 之后能查到线上 0.17.4、判定为最新」和本地假源的下载。首次真更新（0.17.5 → 下一个版本）时**盯一眼** `~/.allai/desktop.log` 里的 `[update]` 行和 `%LOCALAPPDATA%\allai-updater`。
+
+### 0.17.5 还差什么 —— 接手先做这三件
+
+改动只有三处：`package.json` 的 `nsis` 段（`oneClick: false` + `allowToChangeInstallationDirectory` + `include`）、新增 `packaging/installer.nsh`（快捷方式那一页）、`electron/app-update.ts` 的 `quitAndInstall(false, true)` → `(true, true)`。安装包已经打出来并验过「能编译、向导窗口起得来、第 1 页是中文的安装选项页」，**剩下三条没测**：
+
+1. **向导的四页**（用户要的「人性化」就是这个）。双击 `dist\AllAi-Setup-0.17.5.exe`，应该依次看到：
+   ①安装选项（所有用户 / 仅为我）②安装目录（可改）③**快捷方式（`packaging/installer.nsh` 加的那一页，两个勾选框）** ④完成页（带「运行 AllAi」）。
+   想用脚本读页面内容：UIA 读安装器自己的窗口。
+   ⚠️ **别截图、别按坐标点击** —— 窗口不一定在前台（`SetForegroundWindow` 常被 Windows 前台上锁挡掉），坐标点击会打到用户正开着的浏览器上。上一轮就是这么差点出事。
+   ⚠️ NSIS 的按钮在 UIA 里是 `ControlType.Pane` 不是 `Button`，名字是 `下一步(N) >`（不是裸的「下一步」），`InvokePattern` 拿不到，要用 `LegacyIAccessiblePattern.DoDefaultAction()`；实在不行再 SendKeys，但**必须先把窗口弄到前台**。
+2. **静默安装 —— 自动更新唯一的一条路，最该测的就是它。** assisted 安装包最怕的就是把静默装弄坏（那等于更新功能整个断掉）。做法：
+   ```powershell
+   # 装到临时目录，别碰用户的安装位置；--no-desktop-shortcut 保住用户的桌面图标
+   & "dist\AllAi-Setup-0.17.5.exe" /S /D=C:\Users\7ipny\AppData\Local\Temp\allai-silent-test --currentuser --no-desktop-shortcut
+   # 验：文件在、开始菜单有链接、注册表 HKCU\...\Uninstall\AllAi 里有 InstallLocation 和 ShortcutChoice
+   # 清：跑那个目录里的 Uninstall AllAi.exe /S，然后 node scripts/make-shortcut.cjs 还原桌面/开始菜单快捷方式
+   ```
+   `/D=` 必须是最后一个参数、不能带引号。装完**一定**要卸载干净再交活（注册表里留着 InstallLocation 会让用户下次安装默认装到临时目录去）。
+3. **用户装完之后**：桌面快捷方式会被安装包改写成指向安装版的 AllAi（`%LOCALAPPDATA%\Programs\AllAi`）——这是自动更新能生效的前提。但 `node scripts/make-shortcut.cjs` 每次 `npm run dist` 都会把它**改回** `dist\win-unpacked`，改回去之后自动更新就白做了（快捷方式开的那个目录永远停在旧版本）。用户明确说过「不改，保持现状」，所以**不要擅自改那个脚本**；他要是一直从快捷方式开，就得提醒他这一点。
+
+同一条路走通的顺序（下一版发出来时验证）：装 0.17.5 → 发 0.17.6 → 装 0.17.5 的机器**退出时自动装上 0.17.6，再打开就是新版，全程没有向导**。
 
 **更早（0.17.3）：** 额度监控不再把最近几小时的爆发拉成 24 小时不停跑的直线。预测改成「这周已用百分比 ÷ 已经过的时间」，休息算进分母。虚线和告警都走这条。见约定 98。
 

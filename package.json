@@ -1,6 +1,6 @@
 {
   "name": "allai",
-  "version": "0.17.4",
+  "version": "0.17.5",
   "private": true,
   "description": "AllAi desktop — chat and local coding agents",
   "author": "AllAi",
@@ -75,10 +75,12 @@
       ]
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "include": "packaging/installer.nsh",
       "shortcutName": "AllAi",
       "artifactName": "AllAi-Setup-${version}.exe"
     }
