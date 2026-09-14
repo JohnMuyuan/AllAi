@@ -73,10 +73,10 @@ try {
     const report = analyzeAccount("claude", hourlySamples(10, 40, 50), steadyRows(), NOW);
     const w = report.week;
     check("最近 6 小时每小时涨 1 个点", near(w.recentPerH, 1), String(w.recentPerH));
-    check("整个窗口平均 50% / 96 小时", near(w.averagePerH, 50 / 96), String(w.averagePerH));
-    check("预测用平均节奏，不拿最近 1%/小时去 24 小时外推", near(w.ratePerH, 50 / 96), String(w.ratePerH));
-    check("重置时约 87.5%，不会说 50 小时后用完", near(w.projectedAtReset, 50 + (50 / 96) * 72) && !w.runsOutBeforeReset, `${w.projectedAtReset} ${w.etaAt}`);
-    check("87.5% 判成有点紧，不是会提前用完", report.health.reason === "tight", JSON.stringify(report.health));
+    check("整个窗口观测到的平均速度是每小时 1 个点", near(w.averagePerH, 1), String(w.averagePerH));
+    check("预测使用多个采样区间的稳健速度", near(w.ratePerH, 1), String(w.ratePerH));
+    check("重置时按持续速度推算会超过 100%，提前用完", near(w.projectedAtReset, 122) && w.runsOutBeforeReset, `${w.projectedAtReset} ${w.etaAt}`);
+    check("提前用完判成严重，不被低估成有点紧", report.health.reason === "runs-out", JSON.stringify(report.health));
     // 96 小时 × 100 万 = 9600 万 token，已用 50% → 整周 1.92 亿；花费同理 $96 → $192
     check(
       "折算整周额度 = 窗口用量 ÷ 已用百分比",
@@ -86,13 +86,13 @@ try {
     check("24 小时都有用量时 activeShare 是 1", near(w.activeShare, 1), String(w.activeShare));
   }
 
-  // ---- 2. 最近 6 小时没用，但整个窗口平均很快：不能说「用不完」 ----
+  // ---- 2. 只有平台值没有持续上涨：不能拿一次累计值硬猜未来 ----
   {
     const samples = [...hourlySamples(10, 50, 50)];
     const report = analyzeAccount("claude", samples, steadyRows(), NOW);
     const w = report.week;
-    check("最近是 0 时预测仍走平均，不说用不完", near(w.recentPerH, 0) && near(w.ratePerH, 50 / 96), `${w.recentPerH} / ${w.ratePerH}`);
-    check("重置时推算约 87.5%，判成有点紧", near(w.projectedAtReset, 50 + (50 / 96) * 72) && report.health.reason === "tight", `${w.projectedAtReset} ${report.health.reason}`);
+    check("最近是 0 且没有上涨样本时不生成速度", near(w.recentPerH, 0) && w.ratePerH === undefined, `${w.recentPerH} / ${w.ratePerH}`);
+    check("没有可靠速度时保持健康，不虚构预计用完时间", w.projectedAtReset === undefined && report.health.reason === "ok", `${w.projectedAtReset} ${report.health.reason}`);
   }
 
   // ---- 3. 窗口里用了一次重置：掉下来之前的点不算 ----
@@ -176,7 +176,7 @@ try {
     );
   }
 
-  // ---- 9. 一天只用 8 小时：能看出休息，预测仍按墙上时钟平均 ----
+  // ---- 9. 一天只用 8 小时：能看出休息，速度来自额度采样而非 token 活跃时长 ----
   {
     const start = RESET - WEEK_MS;
     const rows = [];
@@ -188,7 +188,7 @@ try {
     const report = analyzeAccount("claude", hourlySamples(10, 40, 50), rows, NOW);
     const w = report.week;
     check("大约三分之一的时间在用", near(w.activeShare, 32 / 96), String(w.activeShare));
-    check("有休息也不改用最近爆发去外推", near(w.ratePerH, 50 / 96) && !w.runsOutBeforeReset, String(w.ratePerH));
+    check("有休息也不改用最近爆发去外推", near(w.ratePerH, 1) && w.runsOutBeforeReset, String(w.ratePerH));
   }
 
   // ---- 10. 采样器 ----

@@ -1,6 +1,14 @@
 "use client";
 
-import { Download, RefreshCw, Trash2 } from "lucide-react";
+import {
+  CalendarRange,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "./ConfirmDialog";
 import { useLang, useT } from "./I18n";
@@ -28,9 +36,10 @@ const AREA_COLOR: Record<UsageArea, string> = {
   studio: "var(--chart-studio)",
 };
 const RANGES = [
-  { id: "current", label: "当前" },
+  { id: "current", label: "当天" },
   { id: "1", label: "一天" },
   { id: "7", label: "7 天" },
+  { id: "14", label: "14 天" },
   { id: "30", label: "30 天" },
   { id: "90", label: "90 天" },
   { id: "all", label: "全部" },
@@ -44,6 +53,43 @@ function fmt(n: number) {
 function dayKey(at: number) {
   const d = new Date(at);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dateTimeLabel(value: string, lang: string) {
+  const at = Date.parse(value);
+  if (!Number.isFinite(at)) return "";
+  return new Date(at).toLocaleString(lang === "en" ? "en-US" : "zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function localDateTimeValue(date: Date) {
+  return `${localDateKey(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function datePart(value: string) {
+  return value.slice(0, 10);
+}
+
+function timePart(value: string, fallback: string) {
+  return value.slice(11, 16) || fallback;
+}
+
+function calendarCells(month: Date) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const firstCell = new Date(month.getFullYear(), month.getMonth(), 1 - first.getDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(firstCell.getFullYear(), firstCell.getMonth(), firstCell.getDate() + index);
+    return { date, key: localDateKey(date), outside: date.getMonth() !== month.getMonth() };
+  });
 }
 
 /** 手写的折线图：项目里没有图表库，也不该为这一个页面加一个。 */
@@ -126,9 +172,18 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
   const [scanning, setScanning] = useState(false);
   const [importing, setImporting] = useState(false);
   const [ccSwitch, setCcSwitch] = useState<CcSwitchPreview | null>(null);
-  const [range, setRange] = useState<(typeof RANGES)[number]["id"] | "custom">("30");
+  const [range, setRange] = useState<(typeof RANGES)[number]["id"] | "custom">("1");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [draftStart, setDraftStart] = useState("");
+  const [draftEnd, setDraftEnd] = useState("");
+  const [followCurrent, setFollowCurrent] = useState(false);
+  const [customFollowNow, setCustomFollowNow] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [areas, setAreas] = useState<UsageArea[]>(["chat", "agent", "studio"]);
   const [loading, setLoading] = useState(true);
   /** 读到数据的时刻，时间范围以它为准（渲染里不能直接调 Date.now）。 */
@@ -183,9 +238,10 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
   }, []);
 
   const filtered = useMemo(() => {
-    if (range === "custom" && customStart) {
-      const start = new Date(`${customStart}T00:00:00`).getTime();
-      const end = customEnd ? new Date(`${customEnd}T23:59:59.999`).getTime() : loadedAt;
+    if (range === "custom") {
+      const start = Date.parse(customStart);
+      const end = customFollowNow ? loadedAt : Date.parse(customEnd);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return [];
       return events.filter((item) => areas.includes(item.area) && item.at >= start && item.at <= end);
     }
     if (range === "current") {
@@ -197,7 +253,73 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
     const days = range === "all" ? 0 : Number(range);
     const since = days && loadedAt ? loadedAt - days * 86400000 : 0;
     return events.filter((item) => areas.includes(item.area) && item.at >= since);
-  }, [areas, events, loadedAt, range, customStart, customEnd]);
+  }, [areas, customEnd, customFollowNow, customStart, events, loadedAt, range]);
+
+  const customRangeValid = useMemo(() => {
+    const start = Date.parse(draftStart);
+    const end = Date.parse(draftEnd);
+    return Number.isFinite(start) && Number.isFinite(end) && start < end;
+  }, [draftEnd, draftStart]);
+
+  function toggleRangeMenu() {
+    if (!rangeOpen) {
+      const now = new Date();
+      const start = customStart || `${localDateKey(now)}T00:00`;
+      const end = customFollowNow ? localDateTimeValue(now) : customEnd || localDateTimeValue(now);
+      setDraftStart(start);
+      setDraftEnd(end);
+      setFollowCurrent(customFollowNow);
+      const monthSource = new Date(Date.parse(start));
+      setCalendarMonth(
+        Number.isFinite(monthSource.getTime())
+          ? new Date(monthSource.getFullYear(), monthSource.getMonth(), 1)
+          : new Date(now.getFullYear(), now.getMonth(), 1),
+      );
+    }
+    setRangeOpen((open) => !open);
+  }
+
+  function changeDraftDate(which: "start" | "end", value: string) {
+    const current = which === "start" ? draftStart : draftEnd;
+    const next = value ? `${value}T${timePart(current, which === "start" ? "00:00" : "23:59")}` : "";
+    if (which === "start") setDraftStart(next);
+    else setDraftEnd(next);
+    if (value) setCalendarMonth(new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, 1));
+  }
+
+  function changeDraftTime(which: "start" | "end", value: string) {
+    const current = which === "start" ? draftStart : draftEnd;
+    const date = datePart(current) || localDateKey(new Date());
+    const next = value ? `${date}T${value}` : `${date}T${which === "start" ? "00:00" : "23:59"}`;
+    if (which === "start") setDraftStart(next);
+    else setDraftEnd(next);
+  }
+
+  function selectCalendarDay(key: string) {
+    const start = datePart(draftStart);
+    const end = datePart(draftEnd);
+    if (!start || end || key < start) {
+      setDraftStart(`${key}T${timePart(draftStart, "00:00")}`);
+      setDraftEnd("");
+      setFollowCurrent(false);
+      return;
+    }
+    setDraftEnd(`${key}T${timePart(draftEnd, "23:59")}`);
+  }
+
+  function toggleFollowCurrent(checked: boolean) {
+    setFollowCurrent(checked);
+    if (checked) setDraftEnd(localDateTimeValue(new Date()));
+  }
+
+  function applyCustomRange() {
+    if (!customRangeValid) return;
+    setCustomStart(draftStart);
+    setCustomEnd(followCurrent ? localDateTimeValue(new Date()) : draftEnd);
+    setCustomFollowNow(followCurrent);
+    setRange("custom");
+    setRangeOpen(false);
+  }
 
   // 热力图自己挑跨度，所以只按专区筛，不按上面的时间范围筛。
   const heatmapEvents = useMemo(
@@ -355,26 +477,169 @@ export function UsageStats({ onToast, providers = [], prefs }: Props) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-5">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-xl border border-line p-0.5">
-          {RANGES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setRange(item.id)}
-              className={`rounded-lg px-2.5 py-1 text-xs ${
-                range === item.id ? "bg-user font-medium" : "text-muted hover:bg-user/60"
-              }`}
+      <div className="relative mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={toggleRangeMenu}
+            aria-expanded={rangeOpen}
+            aria-haspopup="dialog"
+            className={`inline-flex items-center gap-2 rounded-xl border border-line px-3 py-1.5 text-xs ${
+              rangeOpen || range === "custom" ? "bg-user font-medium" : "hover:bg-user/60"
+            }`}
+          >
+            <CalendarRange className="size-3.5 text-muted" aria-hidden="true" />
+            <span>
+              {range === "custom"
+                ? customFollowNow
+                  ? `${t("自定义")} · ${t("跟随当前")}`
+                  : `${t("自定义")} · ${dateTimeLabel(customStart, lang)} → ${dateTimeLabel(customEnd, lang)}`
+                : t(RANGES.find((item) => item.id === range)?.label || "30 天")}
+            </span>
+            <ChevronDown className={`size-3.5 text-muted transition-transform ${rangeOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+          </button>
+          {rangeOpen ? (
+            <div
+              role="dialog"
+              aria-label={t("时间范围")}
+              className="absolute left-0 top-[calc(100%+0.35rem)] z-30 w-[min(36rem,calc(100vw-2.5rem))] overflow-hidden rounded-xl border border-line bg-elevated p-2.5 shadow-lg"
             >
-              {t(item.label)}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1 rounded-xl border border-line px-2 py-1">
-          <span className="text-xs text-muted">{t("自定义")}</span>
-          <input type="date" value={customStart} onChange={(event) => { setCustomStart(event.target.value); setRange("custom"); }} className="bg-transparent text-xs outline-none" aria-label={t("起始日期")} />
-          <span className="text-xs text-muted">→</span>
-          <input type="date" value={customEnd} min={customStart || undefined} onChange={(event) => { setCustomEnd(event.target.value); setRange("custom"); }} className="bg-transparent text-xs outline-none" aria-label={t("结束日期")} />
+              <div className="mb-2 flex flex-nowrap gap-1">
+                {RANGES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { setRange(item.id); setRangeOpen(false); }}
+                    className={`min-w-0 flex-1 whitespace-nowrap rounded-full border px-1 py-0.5 text-center text-[11px] ${
+                      range === item.id
+                        ? "border-accent bg-accent text-white"
+                        : "border-line text-muted hover:bg-user/60"
+                    }`}
+                  >
+                    {t(item.label)}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-[auto_16.5rem] items-stretch gap-2.5">
+                <div className="flex min-w-[18.5rem] flex-col justify-end">
+                  <div className="space-y-1.5 text-[11px]">
+                    <div>
+                      <div className="mb-0.5 text-muted">{t("开始时间")}</div>
+                      <div className="flex flex-nowrap items-center gap-1.5">
+                        <input
+                          type="date"
+                          value={datePart(draftStart)}
+                          onChange={(event) => changeDraftDate("start", event.target.value)}
+                          className="h-7 w-[11rem] shrink-0 rounded-md border border-line bg-transparent px-1.5 text-[11px] outline-none"
+                          aria-label={t("开始日期")}
+                        />
+                        <input
+                          type="time"
+                          value={timePart(draftStart, "00:00")}
+                          onChange={(event) => changeDraftTime("start", event.target.value)}
+                          className="h-7 w-[7.25rem] shrink-0 rounded-md border border-line bg-transparent px-1.5 text-[11px] outline-none"
+                          aria-label={t("开始时间")}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-0.5 text-muted">{t("结束时间")}</div>
+                      <div className="flex flex-nowrap items-center gap-1.5">
+                        <input
+                          type="date"
+                          value={datePart(draftEnd)}
+                          onChange={(event) => changeDraftDate("end", event.target.value)}
+                          disabled={followCurrent}
+                          className="h-7 w-[11rem] shrink-0 rounded-md border border-line bg-transparent px-1.5 text-[11px] outline-none disabled:opacity-45"
+                          aria-label={t("结束日期")}
+                        />
+                        <input
+                          type="time"
+                          value={timePart(draftEnd, "23:59")}
+                          onChange={(event) => changeDraftTime("end", event.target.value)}
+                          disabled={followCurrent}
+                          className="h-7 w-[7.25rem] shrink-0 rounded-md border border-line bg-transparent px-1.5 text-[11px] outline-none disabled:opacity-45"
+                          aria-label={t("结束时间")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <label className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-muted">
+                    <input
+                      type="checkbox"
+                      checked={followCurrent}
+                      onChange={(event) => toggleFollowCurrent(event.target.checked)}
+                      className="size-3 accent-[var(--accent)]"
+                    />
+                    {t("结束时间跟随当前时刻")}
+                  </label>
+                  <div className="mt-2 flex items-center gap-1">
+                    <button type="button" onClick={() => setRangeOpen(false)} className="rounded-md px-2 py-1 text-[11px] text-muted hover:bg-user/60">
+                      {t("取消")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!customRangeValid}
+                      onClick={applyCustomRange}
+                      className="rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {t("确定")}
+                    </button>
+                  </div>
+                  {draftStart && draftEnd && !customRangeValid ? (
+                    <div className="mt-1 text-[10px] text-red-500">{t("开始时间必须早于结束时间")}</div>
+                  ) : null}
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                      className="rounded-md p-1 text-muted hover:bg-user/60"
+                      aria-label={t("上个月")}
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </button>
+                    <div className="text-xs font-medium">
+                      {calendarMonth.toLocaleDateString(lang === "en" ? "en-US" : "zh-CN", { year: "numeric", month: "long" })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                      className="rounded-md p-1 text-muted hover:bg-user/60"
+                      aria-label={t("下个月")}
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 text-center text-[10px] text-muted">
+                    {["日", "一", "二", "三", "四", "五", "六"].map((day) => <span key={day} className="py-0.5">{t(day)}</span>)}
+                  </div>
+                  <div className="grid grid-cols-7 gap-px">
+                    {calendarCells(calendarMonth).map(({ date, key, outside }) => {
+                      const start = datePart(draftStart);
+                      const end = datePart(draftEnd);
+                      const selected = key === start || key === end;
+                      const inRange = Boolean(start && end && key > start && key < end);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          disabled={outside}
+                          onClick={() => selectCalendarDay(key)}
+                          className={`h-7 rounded text-[11px] transition-colors ${
+                            selected ? "bg-accent font-medium text-white" : inRange ? "bg-accent/12 text-accent" : outside ? "text-muted/30" : "hover:bg-user"
+                          }`}
+                        >
+                          {date.getDate()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-1">
           {(["chat", "agent", "studio"] as UsageArea[]).map((area) => {

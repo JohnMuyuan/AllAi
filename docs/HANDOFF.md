@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.17.5**，安装包 `dist/AllAi-Setup-0.17.5.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.6**，安装包 `dist/AllAi-Setup-0.17.6.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -28,6 +28,8 @@
    发版附件少了 `latest.yml` 谁也更新不动。**
    约定 102 是 0.17.5 的：**安装包是向导，但自动更新必须静默（`quitAndInstall(true, …)`）——
    非静默会让每次自动更新都在用户面前弹一遍安装向导。**
+   约定 103 是 0.17.6 的：**额度预测只用持续采样的稳健速度；官方 ChatGPT 用量要同时覆盖
+   Codex 会话和 AllAi 自己的官方聊天记录，不能因旧缓存或来源名称空格差异漏算。**
 
 ---
 
@@ -283,7 +285,7 @@ Claude `-p` + `stream-json` 必须带 `--verbose`，否则直接报错。Grok �
 | 环节 | 位置 | 说明 |
 |------|------|------|
 | 采样 | `electron/quota-history.ts` → `~/.allai/quota-history.json` | `fetchOfficialQuota` 每次真的问过接口（没走缓存）就记一笔；主进程每 5 分钟问一次，不管设置页开没开。没变化的 15 分钟内只记一次，留 45 天。 |
-| 按小时的用量 | `electron/usage-scan.ts` 的 `files[].hours` | 整点时间戳 × 型号，留 40 天。`STATE_VERSION = 2`：老账遇到就重读一次，只重读 40 天内动过的文件。 |
+| 按小时的用量 | `electron/usage-scan.ts` 的 `files[].hours` | 整点时间戳 × 型号，留 40 天。`STATE_VERSION = 3`：老账遇到就重读一次，并重新确认 Codex 文件头的官方 provider；只重读 40 天内动过的文件。 |
 | 归属 | 同上 `files[].official` / `kind` | Codex 看会话开头 `session_meta.model_provider`（`openai` 才算）；Claude Code / Grok 会话里不记，看全局配置（`~/.claude/settings.json` 的 env、`~/.grok/config.toml` 的 `base_url`），见 `configOfficial`。 |
 | 计算 | `lib/quota-monitor.ts`（纯函数） | 口径写在文件头，见约定 98。 |
 | 接口 | `app/api/quota-monitor` | 本机官方会话 + AllAi 官方登录聊天（usage.json 里 source 是「Claude 账号」这种；那些 CLI 会话在 `~/.allai/*-chat`，扫描器本来就跳过，不会重复）。没采到过额度的账号不返回。 |
@@ -636,7 +638,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
    `lib/context-window.ts` 的 `compactNotice` 就是照这个拆的（`COMPACT_NOTICE` + `compactNoticeVars`），
    服务端不知道界面语言，直接调 `compactNotice()` 拿中文；界面调 `t(COMPACT_NOTICE, vars)`。
    同理，新增带变量的文案时**别把数字拼进模板**。
-98. **额度监控的预测用整段窗口平均节奏（已用% ÷ 已经过的墙上时钟小时），折算整窗额度要求已用 >= 2%。** 休息已经在分母里，禁止把最近几小时的爆发当成接下来 24 小时不停跑。最近速度只展示；睡一觉回来最近是 0，预测仍走平均，不会说「永远用不完」。Claude 的 utilization 是整数，1% 时折算误差能放大几十倍。窗口里百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算，别拿上周的 95% 报警。改口径先改 `scripts/test-quota-monitor.cjs`。
+98. **额度监控的预计用完时间用窗口内持续采样的稳健速度。** 速度来自满足最小观察跨度的正向区间涨幅中位数，至少要有两次独立上涨才外推；单次突发跳涨或没有上涨样本时不虚构 ETA。窗口百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算。折算整窗额度仍要求已用 >= 2%，因为 Claude 的 utilization 是整数，1% 时误差能放大几十倍。改口径先改 `scripts/test-quota-monitor.cjs`。
 99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
 100. **模型溯源测 OpenAI / Claude：HTTP 走 Key，官方登录走本机 CLI。** 自动探测是回复后再发一条整数生成挑战，**不是**拿那条聊天正文做指纹。官方 Claude / ChatGPT 用 `official-probe` 在 `~/.allai/model-trace/` 开一轮 print，不要 resume 用户的聊天会话，也不要进 Agent 列表。Grok 指纹库没有，不测。操控电脑循环和 Agent 会话不要测。挑战原文发给模型，不要进 i18n。`gpt-5` 这种对不上指纹库的型号只比家族，禁止用双向 `includes` 去撞 `gpt-5.4`。
 101. **AllAi 自己的更新走 `electron/app-update.ts`（electron-updater），和本机 CLI 的更新（约定 57）是两回事，别混。** 更新源是 GitHub Release，仓库地址不写在代码里 —— electron-builder 打包时把 git remote 的 owner/repo 写进 `resources/app-update.yml`，electron-updater 自己读。**发版附件必须有 `latest.yml` 和 `.blockmap`**，少了 `latest.yml` 谁也更新不动。查到就地后台下载（`autoDownload = false`，我们自己在 `update-available` 里下），**默认不打断用户**：下好了退出时自动装（`autoInstallOnAppQuit`），设置 → 关于里能立刻重启。状态一律写在界面上，**不弹窗**（约定 22）。持久化只留 `latest` / `error` / `downloaded` 三种状态，`checking` / `downloading` 是这一轮的临时状态，重启不许接着显示。测试用 `ALLAI_UPDATE_FEED` 换源，别在测试里连真 GitHub。回归 `scripts/test-app-update.cjs`。
@@ -822,13 +824,17 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.17.5**，安装包 `dist/AllAi-Setup-0.17.5.exe`，桌面快捷方式已更新。
+当前发版 **0.17.6**，安装包 `dist/AllAi-Setup-0.17.6.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
 **仓库已经公开（0.17.4 时用户自己公开的）**，为的是让 App 走 GitHub Release 自动更新。公开前扫过一遍：14 个提交的完整历史里没有 Key / token / 服务器地址，`.env`、`relay-deploy.env`、`dist/` 都没进 git。留在仓库里的个人信息只有第三方网关域名 `ai.yp.mk`（`CHANGELOG.md`、本文件、`lib/imagine.ts` 的注释里各一处，只有主机名没带 Key）。**以后往仓库里加东西先扫一遍再说。**
 
 **最近刚做完（0.17.5）：** 安装包从「双击就装」改成向导：选装给谁、选目录、两个快捷方式勾选框、完成页可勾「运行 AllAi」。自动更新仍然静默，不会弹向导。见约定 102。
+
+**最近刚做完（0.17.6）：** 使用统计的时间范围改成带预设和分钟级自定义日历的二级面板；额度预测改用持续采样的稳健速度；Codex 扫描器会升级旧缓存并重新识别官方 ChatGPT 会话，额度监控还兼容 AllAi 官方聊天来源的格式差异。
+
+**0.17.6 验证记录：** `check-client-imports`、应用/Electron TypeScript、ESLint、生产构建、`test-quota-monitor.cjs`（27/27）和 `test-usage-scan.cjs`（18/18）已通过；打包运行时检查也通过。`test-quota-monitor-ui.cjs` 在本机启动 Electron 时遇到 GPU 进程不可用和 Chromium 缓存目录拒绝访问，未进入应用断言，需在 GPU/缓存权限正常的环境补跑。
 
 **更早（0.17.4）：** AllAi 自己能更新自己了。`electron/app-update.ts` 用 electron-updater 查 GitHub Release，查到就地后台下载（差分），**退出时自动装**，下次打开就是新版本；设置 → 关于里能手动查、能立刻重启、能关。见约定 101 和「改完要跑的检查」里的 `test-app-update.cjs`。
 

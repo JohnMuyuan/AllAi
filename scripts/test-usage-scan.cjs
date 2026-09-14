@@ -209,6 +209,14 @@ try {
     files[codexOfficial]?.official === true && files[codexRelay]?.official === false && files[codexOfficial]?.kind === "codex",
     JSON.stringify({ o: files[codexOfficial]?.official, r: files[codexRelay]?.official }),
   );
+  // 0.17.5 的旧缓存可能把官方文件记成 false；升级后要重读近期文件头并纠正归属。
+  const stale = readRollups();
+  stale.files[codexOfficial].v = 2;
+  stale.files[codexOfficial].official = false;
+  writeRollups(stale);
+  scanLocalUsage();
+  files = readRollups().files;
+  check("Codex：旧缓存的错误归属会被升级扫描纠正", files[codexOfficial]?.official === true);
   check("Claude：没配中转地址就算官方", files[claudeRecent]?.official === true);
   check("Grok：config.toml 配了 base_url 就不算官方", files[grokRelay]?.official === false, String(files[grokRelay]?.official));
   const hourRow = files[claudeRecent]?.hours?.[String(recentHour)]?.["claude-opus-5"];
@@ -224,7 +232,7 @@ try {
   files = readRollups().files;
   check(
     "老账升级：补上按小时的账，日账不翻倍",
-    files[claudeRecent].v === 2 &&
+      files[claudeRecent].v === 3 &&
       files[claudeRecent].hours?.[String(recentHour)]?.["claude-opus-5"]?.requests === 1 &&
       JSON.stringify(files[claudeRecent].days) === daysBefore,
     JSON.stringify(files[claudeRecent].days),

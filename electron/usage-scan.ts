@@ -81,7 +81,7 @@ type FileState = {
  * 0.17.0 起每个文件多记了 hours / official / kind。老账没有这些，遇到就重读一次 ——
  * 只重读最近 HOURS_KEEP_MS 里动过的文件（更早的用不上按小时的账，日账也是对的）。
  */
-const STATE_VERSION = 2;
+const STATE_VERSION = 3;
 /** 按小时的账只留这么久：额度监控最多看一周，多留点余量。 */
 const HOURS_KEEP_MS = 40 * 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -190,8 +190,10 @@ function dayOf(ms: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const num = (value: unknown) =>
-  typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+const num = (value: unknown) => {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
+};
 
 /* ---------------- 找文件 ---------------- */
 
@@ -280,6 +282,7 @@ function codexRow(obj: Record<string, unknown>): Row | null {
   // Codex 的 input_tokens **已经含**缓存读，别再加一次（和 chat-parse 里同一个口径）。
   return {
     at,
+    id: String(payload?.response_id || ""),
     model: "",
     usage: {
       input: num(usage.input_tokens),
@@ -291,6 +294,41 @@ function codexRow(obj: Record<string, unknown>): Row | null {
       requests: 1,
     },
   };
+}
+
+function isOfficialCodexProvider(value: string) {
+  const provider = value.trim().toLowerCase();
+  return provider === "openai" || provider === "openai-codex" || provider === "chatgpt";
+}
+
+/**
+ * Codex 的 `session_meta` 在会话文件最前面。单靠当前增量偏移判断会漏掉两类文件：
+ * 旧版本已经扫过但没有记录 provider 的文件，以及状态文件迁移后 offset 已经在文件中段的文件。
+ * 这里只读文件头，不重扫 token 账，确保官方 ChatGPT 会话能被重新归类。
+ */
+function readCodexProvider(file: string) {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(file, "r");
+    const buffer = Buffer.allocUnsafe(256 * 1024);
+    const read = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    for (const line of buffer.subarray(0, read).toString("utf8").split("\n")) {
+      if (!line.trim().startsWith("{")) continue;
+      try {
+        const obj = JSON.parse(line) as Record<string, unknown>;
+        if (obj.type !== "session_meta") continue;
+        const payload = obj.payload as Record<string, unknown> | undefined;
+        if (typeof payload?.model_provider === "string") return payload.model_provider;
+      } catch {
+        // 文件头可能正好落在一条未写完的 JSON 行上，后面的完整行仍可判断。
+      }
+    }
+  } catch {
+    return undefined;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  return undefined;
 }
 
 function grokRows(obj: Record<string, unknown>): Row[] {
@@ -346,6 +384,10 @@ function scanFile(file: string, kind: Kind, state: FileState, official: Record<K
     }
   }
   state.kind = kind;
+  if (kind === "codex") {
+    const provider = readCodexProvider(file);
+    if (provider) state.official = isOfficialCodexProvider(provider);
+  }
   if (state.official === undefined && kind !== "codex") state.official = official[kind];
   // 变小了 = 被重写/截断过，之前记的账对不上了：整份清掉重读。
   if (stat.size < state.offset) {
@@ -396,7 +438,7 @@ function scanFile(file: string, kind: Kind, state: FileState, official: Record<K
       const payload = obj.payload as Record<string, unknown> | undefined;
       // 会话开头那条自己写了走哪家：openai = 官方 ChatGPT 账号，custom 之类 = 中转站。
       if (obj.type === "session_meta" && typeof payload?.model_provider === "string") {
-        state.official = payload.model_provider === "openai";
+        state.official = isOfficialCodexProvider(payload.model_provider);
       }
       if (payload?.type === "thread_settings_applied") {
         const settings = payload.thread_settings as Record<string, unknown> | undefined;

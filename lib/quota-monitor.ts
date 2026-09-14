@@ -9,9 +9,10 @@
  * - **窗口起点**：周窗口优先用接口直接给的 weekStart（Grok 有），否则 weekReset - 7 天；
  *   5 小时窗口 = fiveReset - 5 小时。
  * - **窗口里百分比掉下来之前的样本不算**：到点重置、或者用了一次手动重置，前面的点就不属于这个窗口了。
- * - **预测用整段窗口的平均节奏（已用% ÷ 已经过的墙上时钟小时）**。休息、睡觉已经在分母里，
- *   不会把晚上两小时的爆发拉成一条 24 小时不停跑的直线。最近速度只给界面看；
- *   睡一觉回来最近是 0，预测仍走平均，不会说「永远用不完」。
+ * - **预测只用窗口内实际采样点之间的持续涨幅**。不再用「当前百分比 ÷ 窗口已过时间」
+ *   猜速度：窗口起点可能是接口推导出来的，期间也可能长时间没有采样，这会把走势压扁或
+ *   放大。速度取所有足够长区间的涨幅中位数，至少观察到两次上涨才给预计用完时间；
+ *   一次突发跳涨只显示在趋势里，不拿它外推整周。休息时间仍然保留在采样间隔里。
  * - **折算整窗额度要求已用 >= 2%**：Claude 的 utilization 是整数，1% 的时候误差能放大几十倍。
  *   已用越多越准，界面上把可信度标出来。
  * - 采样之后已经到点重置、接口还没再问过：按新窗口从 0 算，不拿上个窗口的百分比吓人。
@@ -43,9 +44,9 @@ export type WindowReport = {
   leftH?: number;
   /** 最近一段（周 6 小时 / 5 小时窗口 1 小时）每小时涨几个百分点。采样跨度不够时没有。 */
   recentPerH?: number;
-  /** 整个窗口平均每小时涨几个百分点（含休息）。 */
+  /** 观测到的首尾样本每小时涨几个百分点。 */
   averagePerH?: number;
-  /** 预测用的速度：就是 averagePerH。最近爆发不拿去当 24 小时不停跑。 */
+  /** 预测用的稳健速度：足够长区间涨幅的中位数。 */
   ratePerH?: number;
   /** 这个窗口里真正有用量的小时占比。有的话界面可以写成「大约每天用 n 小时」。 */
   activeShare?: number;
@@ -141,6 +142,41 @@ function rollWindow(current: number, startAt: number | undefined, resetAt: numbe
   return { current: 0, startAt: next - length, resetAt: next, stale: true };
 }
 
+function median(values: number[]) {
+  if (!values.length) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+/**
+ * 计算可以拿来外推的速度。
+ *
+ * 百分比采样会有取整和偶发抖动，单个相邻点的涨幅很容易成为离群值；把所有满足
+ * 最小观察跨度的正向区间放在一起取中位数，既保留长期节奏，也不会被一次突发请求
+ * 牵着走。至少两个独立的正向步进才认为「正在持续消耗」。
+ */
+function sustainedRate(points: Point[], minSpanMs: number) {
+  const ordered = [...points].sort((a, b) => a.at - b.at);
+  let positiveSteps = 0;
+  for (let i = 1; i < ordered.length; i++) {
+    if (ordered[i].pct - ordered[i - 1].pct > 0.5) positiveSteps += 1;
+  }
+  if (positiveSteps < 2) return undefined;
+
+  const rates: number[] = [];
+  for (let i = 0; i < ordered.length; i++) {
+    for (let j = i + 1; j < ordered.length; j++) {
+      const span = ordered[j].at - ordered[i].at;
+      if (span < minSpanMs) continue;
+      const delta = ordered[j].pct - ordered[i].pct;
+      if (delta <= 0.5) continue;
+      rates.push(delta / (span / HOUR_MS));
+    }
+  }
+  return median(rates);
+}
+
 export function analyzeWindow(
   input: { current: number; startAt?: number; resetAt?: number; points: Point[]; lookbackMs: number; minSpanMs: number },
   rows: HourRow[],
@@ -158,8 +194,13 @@ export function analyzeWindow(
       recentPerH = Math.max(0, last.pct - first.pct) / ((last.at - first.at) / HOUR_MS);
     }
   }
-  const averagePerH = elapsedH != null && elapsedH * HOUR_MS >= minSpanMs ? current / elapsedH : undefined;
-  const ratePerH = averagePerH;
+  const first = points[0];
+  const observedSpan = first && last ? last.at - first.at : 0;
+  const averagePerH =
+    first && last && observedSpan >= minSpanMs
+      ? Math.max(0, last.pct - first.pct) / (observedSpan / HOUR_MS)
+      : undefined;
+  const ratePerH = sustainedRate(points, minSpanMs);
   const activeShare = activeShareOf(rows, startAt, now);
 
   const exhausted = current >= 100;

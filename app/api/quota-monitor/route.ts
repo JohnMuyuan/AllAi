@@ -46,9 +46,15 @@ export async function GET() {
     chatgpt: [...local.chatgpt.rows],
     grok: [...local.grok.rows],
   };
-  const kindOfSource = new Map<string, AccountKind>(OFFICIAL_CHATS.map((spec) => [spec.name, spec.kind]));
+  const kindOfSource = new Map<string, AccountKind>();
+  for (const spec of OFFICIAL_CHATS) {
+    kindOfSource.set(spec.name.trim().toLocaleLowerCase(), spec.kind);
+    // 兼容早期版本或导入数据里没有空格的显示名，避免 ChatGPT 官方聊天被漏算。
+    kindOfSource.set(spec.name.replace(/\s+/g, "").toLocaleLowerCase(), spec.kind);
+  }
   for (const event of events) {
-    const kind = kindOfSource.get(event.source);
+    const source = event.source.trim().toLocaleLowerCase();
+    const kind = kindOfSource.get(source) || kindOfSource.get(source.replace(/\s+/g, ""));
     if (!kind || event.at < since) continue;
     const input = fullInput(event);
     const model = event.modelId || "未知模型";
