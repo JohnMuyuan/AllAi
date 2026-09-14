@@ -78,30 +78,16 @@ async function complete(provider: Provider, modelId: string, prompt: string) {
   throw new Error(last || "探测请求失败");
 }
 
-export async function runModelTraceProbe(opts: {
-  providerId: string;
+export async function analyzeCollectedOutputs(opts: {
   modelId: string;
-  queries?: number;
+  outputs: { text: string; expected_count?: number }[];
   conversationId?: string;
   messageId?: string;
   source?: "auto" | "manual";
 }): Promise<TraceRecord> {
   const family = traceFamily(opts.modelId);
   if (!family) throw new Error("只支持 OpenAI 和 Claude 型号");
-  const db = await readDb();
-  const provider = db.providers.find((item) => item.id === opts.providerId);
-  if (!provider) throw new Error("找不到这个接口");
-  if (isOfficialProvider(provider) || !provider.apiKey) {
-    throw new Error("官方登录的 CLI 账号不走 HTTP，没法做指纹探测");
-  }
-  const count = Math.min(3, Math.max(1, opts.queries || 1));
-  const challenges = generateChallenges(count);
-  const outputs = [];
-  for (const challenge of challenges) {
-    const text = await complete(provider, opts.modelId, challenge.prompt);
-    outputs.push({ text, expected_count: challenge.expectedCount });
-  }
-  const result = analyzeOutputs(outputs, BANK);
+  const result = analyzeOutputs(opts.outputs, BANK);
   const mismatch = isRouteMismatch(
     opts.modelId,
     result.prediction,
@@ -120,5 +106,37 @@ export async function runModelTraceProbe(opts: {
     conversationId: opts.conversationId,
     messageId: opts.messageId,
     source: opts.source || "manual",
+  });
+}
+
+export async function runModelTraceProbe(opts: {
+  providerId: string;
+  modelId: string;
+  queries?: number;
+  conversationId?: string;
+  messageId?: string;
+  source?: "auto" | "manual";
+}): Promise<TraceRecord> {
+  const family = traceFamily(opts.modelId);
+  if (!family) throw new Error("只支持 OpenAI 和 Claude 型号");
+  const db = await readDb();
+  const provider = db.providers.find((item) => item.id === opts.providerId);
+  if (!provider) throw new Error("找不到这个接口");
+  if (isOfficialProvider(provider) || !provider.apiKey) {
+    throw new Error("官方登录请走本机 CLI 探测");
+  }
+  const count = Math.min(3, Math.max(1, opts.queries || 1));
+  const challenges = generateChallenges(count);
+  const outputs = [];
+  for (const challenge of challenges) {
+    const text = await complete(provider, opts.modelId, challenge.prompt);
+    outputs.push({ text, expected_count: challenge.expectedCount });
+  }
+  return analyzeCollectedOutputs({
+    modelId: opts.modelId,
+    outputs,
+    conversationId: opts.conversationId,
+    messageId: opts.messageId,
+    source: opts.source,
   });
 }

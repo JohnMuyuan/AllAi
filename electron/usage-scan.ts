@@ -200,7 +200,7 @@ const num = (value: unknown) =>
  * 那些轮次 AllAi 已经按「聊天」记过账了，这里必须跳过，否则算两遍。
  */
 function isAllAiChatPath(text: string) {
-  return /[\\/-]allai[\\/-](claude|grok|chatgpt)-chat/i.test(text);
+  return /[\\/-]allai[\\/-]((claude|grok|chatgpt)-chat|model-trace)/i.test(text);
 }
 
 function walkJsonl(dir: string, out: string[] = [], depth = 0) {

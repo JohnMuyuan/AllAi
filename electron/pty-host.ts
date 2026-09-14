@@ -67,6 +67,15 @@ type OfficialChatOpts = {
   elevated?: boolean;
 };
 
+type OfficialProbeOpts = {
+  kind: "claude" | "chatgpt";
+  model?: string;
+  prompt: string;
+};
+
+const TRACE_SYSTEM =
+  "Follow the user's output constraints exactly. Never call tools, code interpreters, calculators, search, APIs, or random-number services. Complete the request using the language model itself.";
+
 type Incoming =
   | { id: string; type: "start"; opts: StartOpts }
   | { id: string; type: "write"; sessionId: string; data: string }
@@ -81,6 +90,7 @@ type Incoming =
   | { id: string; type: "cli-auth-logout"; kind: CliAuthKind; command?: string }
   | { id: string; type: "cli-models"; kind: CliAuthKind; command?: string }
   | { id: string; type: "official-chat"; opts: OfficialChatOpts }
+  | { id: string; type: "official-probe"; opts: OfficialProbeOpts }
   | { id: string; type: "delete-work"; work: DeletableWork }
   | { id: string; type: "watch-work"; work: DeletableWork }
   | { id: string; type: "unwatch-work" }
@@ -373,6 +383,61 @@ process.on("message", async (message: Incoming) => {
       );
       chats.set(message.opts.sessionId, handle);
       send({ id: message.id, type: "result", result: { ok: true } });
+      return;
+    }
+    if (message.type === "official-probe") {
+      const kind = message.opts.kind === "chatgpt" ? "chatgpt" : "claude";
+      const cliKind = kind === "chatgpt" ? "codex" : "claude-code";
+      const cliName = kind === "chatgpt" ? "Codex CLI" : "Claude Code";
+      const command = await resolveCommand(cliKind, "");
+      if (!command) {
+        send({
+          id: message.id,
+          type: "result",
+          result: { ok: false, error: `没有找到 ${cliName}。请先安装对应的命令行。` },
+        });
+        return;
+      }
+      const cwd = path.join(os.homedir(), ".allai", "model-trace");
+      fs.mkdirSync(cwd, { recursive: true });
+      const sessionId = `trace-probe-${crypto.randomUUID()}`;
+      let text = "";
+      let error = "";
+      let settled = false;
+      const finish = (result: { ok: true; text: string } | { ok: false; error: string }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        chats.delete(sessionId);
+        send({ id: message.id, type: "result", result });
+      };
+      const timer = setTimeout(() => {
+        chats.get(sessionId)?.kill();
+        finish({ ok: false, error: "探测超时" });
+      }, 180_000);
+      const handle = runChatTurn(
+        {
+          sessionId,
+          agent: officialChatAgent(cliKind),
+          command,
+          prompt: message.opts.prompt,
+          cwd,
+          model: message.opts.model,
+          mode: "chat",
+          webSearch: false,
+          systemPrompt: TRACE_SYSTEM,
+        },
+        (event) => {
+          if (event.type === "delta") text += event.text;
+          if (event.type === "replace") text = event.text;
+          if (event.type === "error") error = event.message;
+          if (event.type === "done") {
+            if (error && !text.trim()) finish({ ok: false, error });
+            else finish({ ok: true, text });
+          }
+        },
+      );
+      chats.set(sessionId, handle);
       return;
     }
     if (message.type === "watch-work") {

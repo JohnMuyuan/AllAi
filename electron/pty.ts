@@ -127,7 +127,7 @@ function getHost() {
 
 // 登录要等用户在浏览器里授权，最长 180s；其余调用不该无限期挂着。
 // 管理员授权也要等用户在系统弹窗里点确认。
-const LONG_CALLS = new Set(["cli-auth-login", "login", "admin-ensure"]);
+const LONG_CALLS = new Set(["cli-auth-login", "login", "admin-ensure", "official-probe"]);
 
 /*
  * 给终端宿主发一条请求。
@@ -300,6 +300,14 @@ export function officialChat(opts: {
   elevated?: boolean;
 }) {
   return request<{ ok: true } | { ok: false; error: string }>({ type: "official-chat", opts });
+}
+
+/** 模型溯源：官方 Claude / ChatGPT 走本机 CLI 打一条数字挑战，不进用户的聊天会话。 */
+export function officialProbe(opts: { kind: "claude" | "chatgpt"; model?: string; prompt: string }) {
+  return request<{ ok: true; text: string } | { ok: false; error: string }>({
+    type: "official-probe",
+    opts,
+  });
 }
 
 /** 拿到管理员宿主（必要时弹 UAC）。真正干活的在终端宿主里，见 admin-client.ts。 */

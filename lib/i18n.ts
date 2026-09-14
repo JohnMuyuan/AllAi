@@ -508,15 +508,15 @@ const EN: Record<string, string> = {
   /* 图标 */
   "溯源": "Trace",
   "模型溯源": "Model trace",
-  "用数字指纹探测 HTTP 接口上的 OpenAI / Claude 是不是被路由到别的型号。官方登录的 CLI 不测。方法来自 ModelTrace。":
-    "Fingerprint HTTP OpenAI / Claude endpoints to see if replies are routed to another model. Official CLI logins are not probed. Method from ModelTrace.",
+  "用数字指纹探测 OpenAI / Claude 是不是被路由到别的型号。HTTP 接口走 Key；官方登录的 Claude / ChatGPT 走本机 CLI，会用一点订阅额度。方法来自 ModelTrace。":
+    "Fingerprint OpenAI / Claude to see if replies are routed to another model. HTTP endpoints use an API key; official Claude / ChatGPT logins use the local CLI and a bit of subscription quota. Method from ModelTrace.",
   "自动探测": "Auto probe",
   "还没有探测记录": "No probes yet",
   "最近探测路由占比 {n}%": "Recent routing rate {n}%",
   "没有发现被路由到别的型号。": "No routing to another model was found.",
   "有一部分回复对不上你选的型号。": "Some replies do not match the model you picked.",
   "被路由的比例偏高，建议换接口或核对账号。": "Routing rate is high. Check the endpoint or account.",
-  "没有可探测的 OpenAI / Claude 接口": "No OpenAI / Claude HTTP endpoint to probe",
+  "没有可探测的 OpenAI / Claude 接口": "No OpenAI / Claude endpoint to probe",
   "探测中…": "Probing…",
   "手动探测": "Probe now",
   "探测完成": "Probe finished",
@@ -528,8 +528,7 @@ const EN: Record<string, string> = {
   "手动": "Manual",
   "模型被路由": "Model routed",
   "只支持 OpenAI 和 Claude 型号": "Only OpenAI and Claude models are supported",
-  "官方登录的 CLI 账号不走 HTTP，没法做指纹探测":
-    "Official CLI logins have no HTTP probe path",
+  "官方登录请走本机 CLI 探测": "Official logins are probed through the local CLI",
   "找不到这个接口": "Endpoint not found",
   "探测请求失败": "Probe request failed",
   "没有可用回答：数字序列太短或被拒答。": "No usable reply: the number sequence was too short or refused.",

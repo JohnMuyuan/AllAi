@@ -36,6 +36,8 @@ export type ChatTurnOpts = {
   history?: { role: "user" | "assistant"; content: string }[];
   /** 经提权宿主启动 CLI。AllAi 本身已是管理员时仍走普通 spawn。 */
   elevated?: boolean;
+  /** 覆盖聊天模式的系统提示。模型溯源用更短的约束，避免「聊天助手」口吻干扰数字序列。 */
+  systemPrompt?: string;
 };
 
 const CHAT_SYSTEM =
@@ -154,6 +156,7 @@ function writePromptFile(sessionId: string, prompt: string) {
 export function buildArgs(opts: ChatTurnOpts): { args: string[]; cleanup?: string; stdin?: string } {
   const extra = [...(opts.agent.args ?? [])];
   const model = (opts.model || opts.agent.model).trim();
+  const system = opts.systemPrompt || CHAT_SYSTEM;
   // Claude 聊天走 stdin 的多轮输入，历史不进 prompt；其余情况（包括 Agent）
   // 带历史的那一版才是真正发出去的内容，长度判断也要按它来。
   const claudeStdin =
@@ -171,7 +174,7 @@ export function buildArgs(opts: ChatTurnOpts): { args: string[]; cleanup?: strin
       // 聊天不是编程会话：不给文件/命令工具，只在用户开了联网时放行搜索。
       args.push("--tools", opts.webSearch ? "web_search,web_fetch" : "");
       if (!opts.webSearch) args.push("--disable-web-search");
-      args.push("--no-subagents", "--no-plan", "--system-prompt-override", CHAT_SYSTEM);
+      args.push("--no-subagents", "--no-plan", "--system-prompt-override", system);
     } else {
       if (!opts.webSearch) args.push("--disable-web-search");
       args.push(...grokPermissionArgs(opts.permissionMode));
@@ -207,7 +210,7 @@ export function buildArgs(opts: ChatTurnOpts): { args: string[]; cleanup?: strin
         "--disable-slash-commands",
         "--safe-mode",
         "--system-prompt",
-        CHAT_SYSTEM,
+        system,
       );
       if (opts.resumeId) args.push("--resume", opts.resumeId);
       else if (opts.newSessionId) args.push("--session-id", opts.newSessionId);
@@ -253,7 +256,7 @@ export function buildArgs(opts: ChatTurnOpts): { args: string[]; cleanup?: strin
       }
       args.push("-c", `tools.web_search=${opts.webSearch ? "true" : "false"}`);
       // codex 没有 --system-prompt，也没有多轮输入：系统提示和历史都拼进 prompt。
-      const full = `${CHAT_SYSTEM}
+      const full = `${system}
 
 ${outgoing}`;
       if (full.length > 3500) return { args, stdin: full };

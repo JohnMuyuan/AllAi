@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld("allaiDesktop", {
   cliListModels: (kind: string, command?: string) =>
     ipcRenderer.invoke("cli:models", kind, command),
   officialChat: (opts: unknown) => ipcRenderer.invoke("official:chat", opts),
+  officialProbe: (opts: unknown) => ipcRenderer.invoke("official:probe", opts),
   showChatGpt: (bounds: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke("chatgpt:show", bounds),
   hideChatGpt: () => ipcRenderer.invoke("chatgpt:hide"),

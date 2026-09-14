@@ -253,7 +253,7 @@ function scanGrok(): AgentWork[] {
 
 // AllAi 自己的官方登录聊天（Claude 账号 / Grok 账号）也是跑 CLI，
 // session 会落进各家自己的历史目录。那些是聊天，不是本地工作，别混进 Agent 列表。
-const CHAT_CWDS = ["claude-chat", "grok-chat", "chatgpt-chat"].map((name) =>
+const CHAT_CWDS = ["claude-chat", "grok-chat", "chatgpt-chat", "model-trace"].map((name) =>
   path.join(os.homedir(), ".allai", name),
 );
 

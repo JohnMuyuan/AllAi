@@ -172,6 +172,11 @@ export type AllAiDesktop = {
   showChatGpt: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>;
   hideChatGpt: () => Promise<void>;
   revealPath: (href: string, cwd?: string) => Promise<boolean>;
+  officialProbe: (opts: {
+    kind: "claude" | "chatgpt";
+    model?: string;
+    prompt: string;
+  }) => Promise<{ ok: true; text: string } | { ok: false; error: string }>;
   officialQuota: () => Promise<OfficialQuotaMap>;
   /** 扫一遍本机所有 CLI 的用量（增量）。见 electron/usage-scan.ts。 */
   scanUsage: () => Promise<{ files: number; changed: number; skipped: boolean }>;

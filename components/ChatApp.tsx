@@ -43,6 +43,7 @@ import { type LangMode } from "@/lib/i18n";
 import { useLang, useLangState, useT } from "./I18n";
 import { firstModelKey, parseModelKey, titleFrom } from "@/lib/public";
 import { traceFamily } from "@/lib/model-trace/match";
+import { runTraceFromUi } from "@/lib/model-trace/client";
 import { readSse } from "@/lib/sse-client";
 import { permissionOptions, resolvePermission } from "@/lib/permission-mode";
 import { agentContinueSession, agentModelSwitched, PENDING_SESSION_MODEL } from "@/lib/agent-session";
@@ -471,29 +472,15 @@ export function ChatApp() {
     if (prefsRef.current.modelTraceEnabled === false) return;
     const { providerId, modelId } = parseModelKey(modelKeyValue);
     if (!providerId || !modelId || !traceFamily(modelId)) return;
-    void fetch("/api/model-trace", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        providerId,
-        modelId,
-        conversationId,
-        messageId,
-        queries: 1,
-        source: "auto",
-      }),
+    void runTraceFromUi({
+      providerId,
+      modelId,
+      conversationId,
+      messageId,
+      queries: 1,
+      source: "auto",
     })
-      .then(async (response) => {
-        const data = (await response.json()) as {
-          record?: {
-            mismatch: boolean;
-            expected: string;
-            predictedName: string;
-            predicted: string;
-            family: string;
-            probability: number;
-          };
-        };
+      .then((data) => {
         const record = data.record;
         if (!record) return;
         setActive((prev) => {
@@ -938,6 +925,13 @@ export function ChatApp() {
             void saveOfficialConversation(next, finished.firstTurn);
             return next;
           });
+          if (finished.kind === "claude" || finished.kind === "chatgpt") {
+            void runRouteTrace(
+              finished.conversationId,
+              finished.assistantId,
+              `${officialSpec(finished.kind).providerId}::${finished.modelId}`,
+            );
+          }
         }
         return;
       }

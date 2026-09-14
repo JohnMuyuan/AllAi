@@ -34,6 +34,7 @@ import {
   listSessions,
   loginAgent,
   officialChat,
+  officialProbe,
   promptChat,
   resize,
   start,
@@ -368,6 +369,7 @@ function registerIpc() {
     cliListModels(kind, command),
   );
   ipcMain.handle("official:chat", (_event, opts) => officialChat(opts));
+  ipcMain.handle("official:probe", (_event, opts) => officialProbe(opts));
   ipcMain.handle(
     "chatgpt:show",
     (event, bounds: { x: number; y: number; width: number; height: number }) => {

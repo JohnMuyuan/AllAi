@@ -2,8 +2,9 @@
 
 import { AlertTriangle, Check, Play, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { isOfficialProvider } from "@/lib/official-chat";
+import { officialSpecForProvider } from "@/lib/official-chat";
 import { lampLevel, traceFamily } from "@/lib/model-trace/match";
+import { runTraceFromUi } from "@/lib/model-trace/client";
 import type { AppPrefs, PublicProvider } from "@/lib/types";
 import { useT } from "./I18n";
 
@@ -36,8 +37,14 @@ export function ModelTraceSettings({ providers, prefs, onPrefs, onToast }: Props
   const options = useMemo(() => {
     const out: { key: string; label: string; providerId: string; modelId: string }[] = [];
     for (const provider of providers) {
-      if (isOfficialProvider(provider) || !provider.hasKey) continue;
+      const official = officialSpecForProvider(provider);
+      if (official) {
+        if (official.kind !== "claude" && official.kind !== "chatgpt") continue;
+      } else if (!provider.hasKey) {
+        continue;
+      }
       for (const model of provider.models) {
+        if (model.kind && model.kind !== "chat") continue;
         if (!traceFamily(model.id)) continue;
         out.push({
           key: `${provider.id}::${model.id}`,
@@ -70,18 +77,12 @@ export function ModelTraceSettings({ providers, prefs, onPrefs, onToast }: Props
     }
     setBusy(true);
     try {
-      const response = await fetch("/api/model-trace", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          providerId: option.providerId,
-          modelId: option.modelId,
-          queries: 3,
-          source: "manual",
-        }),
+      await runTraceFromUi({
+        providerId: option.providerId,
+        modelId: option.modelId,
+        queries: 3,
+        source: "manual",
       });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error || t("探测失败"));
       await reload();
       onToast?.(t("探测完成"));
     } catch (error) {
@@ -101,7 +102,7 @@ export function ModelTraceSettings({ providers, prefs, onPrefs, onToast }: Props
         <div>
           <h3 className="text-sm font-semibold">{t("模型溯源")}</h3>
           <p className="mt-1 max-w-xl text-xs leading-5 text-muted">
-            {t("用数字指纹探测 HTTP 接口上的 OpenAI / Claude 是不是被路由到别的型号。官方登录的 CLI 不测。方法来自 ModelTrace。")}
+            {t("用数字指纹探测 OpenAI / Claude 是不是被路由到别的型号。HTTP 接口走 Key；官方登录的 Claude / ChatGPT 走本机 CLI，会用一点订阅额度。方法来自 ModelTrace。")}
           </p>
         </div>
         <label className="flex shrink-0 items-center gap-2 text-sm">
