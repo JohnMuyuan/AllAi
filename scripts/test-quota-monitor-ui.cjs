@@ -198,7 +198,9 @@ app.whenReady().then(async () => {
     await wait(600);
     const gpt = await js("document.body.innerText");
     check("切到 ChatGPT 显示订阅档位和重置次数", /plus/i.test(gpt) && /可用重置次数\s*2/.test(gpt), (gpt.match(/可用重置次数[^\n]*\n[^\n]*/) || [""])[0]);
-    check("Codex 排除走中转的会话并写明数量", /排除走中转的 1 个/.test(gpt));
+    check("Codex 排除走中转的会话并写明数量", /排除 1 个/.test(gpt));
+    // ChatGPT 既有周窗口也有 5 小时窗口 → 应该多出 5 小时那一组
+    check("有 5 小时窗口时显示 5 小时额度折合和消耗", /5 小时额度折合/.test(gpt) && /这 5 小时已消耗/.test(gpt));
 
     // Grok：本机 Grok 走中转，会话不算，要说清楚
     await js("window.__click('Grok 账号')");
@@ -206,6 +208,8 @@ app.whenReady().then(async () => {
     const grok = await js("document.body.innerText");
     check("Grok 说明了为什么没算本机会话", /1 个 Grok Build 会话都没有计入/.test(grok));
     check("Grok 没有本机用量时不硬编一个折算", /已用 2% 以上、且本机有这个账号的用量后才能估/.test(grok));
+    // Grok 只有周额度，没有 5 小时窗口 —— 这一组整个不该出现
+    check("没有 5 小时窗口的账号不显示这一组", !/5 小时已用/.test(grok) && !/这 5 小时已消耗/.test(grok));
 
     // 深色
     await js("window.__click('Claude 账号')");

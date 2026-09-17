@@ -9,10 +9,13 @@
  * - **窗口起点**：周窗口优先用接口直接给的 weekStart（Grok 有），否则 weekReset - 7 天；
  *   5 小时窗口 = fiveReset - 5 小时。
  * - **窗口里百分比掉下来之前的样本不算**：到点重置、或者用了一次手动重置，前面的点就不属于这个窗口了。
- * - **预测只用窗口内实际采样点之间的持续涨幅**。不再用「当前百分比 ÷ 窗口已过时间」
- *   猜速度：窗口起点可能是接口推导出来的，期间也可能长时间没有采样，这会把走势压扁或
- *   放大。速度取所有足够长区间的涨幅中位数，至少观察到两次上涨才给预计用完时间；
- *   一次突发跳涨只显示在趋势里，不拿它外推整周。休息时间仍然保留在采样间隔里。
+ * - **预测用「墙上时钟」的平均速度：已用百分比 ÷ 窗口已经过去的时间**。额度是按墙钟重置的，
+ *   你睡觉、开会、关机的时间照样在走，所以这些时间必须留在分母里。
+ *   0.17.6 的做法是只挑「涨了的区间」取中位数，等于假设你 24 小时不停地按爆发速度跑 ——
+ *   实测把 9% 的真实用量外推成重置时 135%（真实约 53%），这就是「提前两天用完」的由来。
+ *   已用百分比是窗口累计值，中间没采到样也不会丢，所以关机、断电都不影响这个算法。
+ * - **同时给出「最近 24 小时」的速度，两者构成一个区间**。平均值用来预测，较快的那个只用来
+ *   提示「最快可能什么时候用完」，不拿它当结论。
  * - **折算整窗额度要求已用 >= 2%**：Claude 的 utilization 是整数，1% 的时候误差能放大几十倍。
  *   已用越多越准，界面上把可信度标出来。
  * - 采样之后已经到点重置、接口还没再问过：按新窗口从 0 算，不拿上个窗口的百分比吓人。
@@ -42,12 +45,18 @@ export type WindowReport = {
   resetAt?: number;
   elapsedH?: number;
   leftH?: number;
-  /** 最近一段（周 6 小时 / 5 小时窗口 1 小时）每小时涨几个百分点。采样跨度不够时没有。 */
+  /** 最近一段（周 24 小时 / 5 小时窗口 1 小时）每小时涨几个百分点。采样跨度不够时没有。 */
   recentPerH?: number;
-  /** 观测到的首尾样本每小时涨几个百分点。 */
+  /** 整个窗口的墙钟平均：已用 ÷ 窗口已过时间。预测就用它。 */
   averagePerH?: number;
-  /** 预测用的稳健速度：足够长区间涨幅的中位数。 */
+  /** 预测用的速度（= averagePerH，没有它时退回 recentPerH）。 */
   ratePerH?: number;
+  /** 平均和最近里较快的那个，用来说「最快可能什么时候用完」。 */
+  fastPerH?: number;
+  /** 按 fastPerH 推到重置时的百分比。 */
+  projectedHigh?: number;
+  /** 按 fastPerH 什么时候到 100%。 */
+  etaFastAt?: number;
   /** 这个窗口里真正有用量的小时占比。有的话界面可以写成「大约每天用 n 小时」。 */
   activeShare?: number;
   /** 按 ratePerH 什么时候到 100%。已经用完、或者速度为 0 时没有。 */
@@ -142,47 +151,21 @@ function rollWindow(current: number, startAt: number | undefined, resetAt: numbe
   return { current: 0, startAt: next - length, resetAt: next, stale: true };
 }
 
-function median(values: number[]) {
-  if (!values.length) return undefined;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-/**
- * 计算可以拿来外推的速度。
- *
- * 百分比采样会有取整和偶发抖动，单个相邻点的涨幅很容易成为离群值；把所有满足
- * 最小观察跨度的正向区间放在一起取中位数，既保留长期节奏，也不会被一次突发请求
- * 牵着走。至少两个独立的正向步进才认为「正在持续消耗」。
- */
-function sustainedRate(points: Point[], minSpanMs: number) {
-  const ordered = [...points].sort((a, b) => a.at - b.at);
-  let positiveSteps = 0;
-  for (let i = 1; i < ordered.length; i++) {
-    if (ordered[i].pct - ordered[i - 1].pct > 0.5) positiveSteps += 1;
-  }
-  if (positiveSteps < 2) return undefined;
-
-  const rates: number[] = [];
-  for (let i = 0; i < ordered.length; i++) {
-    for (let j = i + 1; j < ordered.length; j++) {
-      const span = ordered[j].at - ordered[i].at;
-      if (span < minSpanMs) continue;
-      const delta = ordered[j].pct - ordered[i].pct;
-      if (delta <= 0.5) continue;
-      rates.push(delta / (span / HOUR_MS));
-    }
-  }
-  return median(rates);
-}
-
 export function analyzeWindow(
-  input: { current: number; startAt?: number; resetAt?: number; points: Point[]; lookbackMs: number; minSpanMs: number },
+  input: {
+    current: number;
+    startAt?: number;
+    resetAt?: number;
+    points: Point[];
+    lookbackMs: number;
+    minSpanMs: number;
+    /** 窗口至少走过这么久，才拿平均速度去预测（太早算出来全是噪声）。 */
+    minElapsedMs: number;
+  },
   rows: HourRow[],
   now: number,
 ): WindowReport {
-  const { current, startAt, resetAt, points, lookbackMs, minSpanMs } = input;
+  const { current, startAt, resetAt, points, lookbackMs, minSpanMs, minElapsedMs } = input;
   const elapsedH = startAt != null ? Math.max(0, (now - startAt) / HOUR_MS) : undefined;
   const leftH = resetAt != null ? Math.max(0, (resetAt - now) / HOUR_MS) : undefined;
 
@@ -194,19 +177,26 @@ export function analyzeWindow(
       recentPerH = Math.max(0, last.pct - first.pct) / ((last.at - first.at) / HOUR_MS);
     }
   }
-  const first = points[0];
-  const observedSpan = first && last ? last.at - first.at : 0;
+  /*
+   * 墙钟平均：已用百分比是窗口累计值，除以窗口真正过去的时间。
+   * 关机、睡觉这些没有采样的时间也留在分母里 —— 额度按墙钟重置，它们本来就该算。
+   */
   const averagePerH =
-    first && last && observedSpan >= minSpanMs
-      ? Math.max(0, last.pct - first.pct) / (observedSpan / HOUR_MS)
-      : undefined;
-  const ratePerH = sustainedRate(points, minSpanMs);
+    elapsedH != null && elapsedH * HOUR_MS >= minElapsedMs && elapsedH > 0 ? current / elapsedH : undefined;
+  const ratePerH = averagePerH ?? recentPerH;
+  const fastPerH =
+    averagePerH != null && recentPerH != null ? Math.max(averagePerH, recentPerH) : undefined;
   const activeShare = activeShareOf(rows, startAt, now);
 
   const exhausted = current >= 100;
-  const etaAt = !exhausted && ratePerH != null && ratePerH > 0 ? now + ((100 - current) / ratePerH) * HOUR_MS : undefined;
+  const etaOf = (rate?: number) =>
+    !exhausted && rate != null && rate > 0 ? now + ((100 - current) / rate) * HOUR_MS : undefined;
+  const etaAt = etaOf(ratePerH);
+  const etaFastAt = fastPerH != null && fastPerH > (ratePerH ?? 0) ? etaOf(fastPerH) : undefined;
   const projectedAtReset = ratePerH != null && leftH != null ? current + ratePerH * leftH : undefined;
-  const runsOutBeforeReset = exhausted || (etaAt != null && resetAt != null && etaAt < resetAt);
+  const projectedHigh = fastPerH != null && leftH != null ? current + fastPerH * leftH : undefined;
+  // 只有「按平均也会超」才算会提前用完；一次爆发只体现在 projectedHigh 上。
+  const runsOutBeforeReset = exhausted || (projectedAtReset != null && projectedAtReset >= 100);
 
   const used = startAt != null ? sumRows(rows, startAt, now) : { tokens: 0, costUsd: 0 };
   let capacity: WindowReport["capacity"];
@@ -228,9 +218,12 @@ export function analyzeWindow(
     recentPerH,
     averagePerH,
     ratePerH,
+    fastPerH,
     activeShare,
     etaAt,
+    etaFastAt,
     projectedAtReset,
+    projectedHigh,
     runsOutBeforeReset,
     usedTokens: used.tokens,
     usedCostUsd: used.costUsd,
@@ -247,7 +240,9 @@ function healthOf(week: WindowReport | null, five: WindowReport | null, now: num
     if (main.etaAt != null && main.etaAt - now < soon) return { level: "critical", reason: "runs-out-soon" };
     return { level: "serious", reason: "runs-out" };
   }
-  if ((main.projectedAtReset ?? 0) >= 85) return { level: "warning", reason: "tight" };
+  if ((main.projectedAtReset ?? 0) >= 85 || (main.projectedHigh ?? 0) >= 100) {
+    return { level: "warning", reason: "tight" };
+  }
   if (week && five && five.used >= 80) return { level: "warning", reason: "five-hour-high" };
   return { level: "good", reason: "ok" };
 }
@@ -264,7 +259,16 @@ export function analyzeAccount(kind: AccountKind, input: QuotaSample[], rows: Ho
     const rolled = rollWindow(latest.week, startAt, resetAt, WEEK_MS, now);
     trend = rolled.stale ? [] : pointsOf(samples, (sample) => sample.week, rolled.startAt);
     week = analyzeWindow(
-      { current: rolled.current, startAt: rolled.startAt, resetAt: rolled.resetAt, points: trend, lookbackMs: 6 * HOUR_MS, minSpanMs: HOUR_MS },
+      {
+        current: rolled.current,
+        startAt: rolled.startAt,
+        resetAt: rolled.resetAt,
+        points: trend,
+        // 最近一天的节奏比最近 6 小时稳，够盖住一个作息周期
+        lookbackMs: 24 * HOUR_MS,
+        minSpanMs: 2 * HOUR_MS,
+        minElapsedMs: 4 * HOUR_MS,
+      },
       rows,
       now,
     );
@@ -277,7 +281,15 @@ export function analyzeAccount(kind: AccountKind, input: QuotaSample[], rows: Ho
     const rolled = rollWindow(latest.five, startAt, resetAt, FIVE_HOUR_MS, now);
     const points = rolled.stale ? [] : pointsOf(samples, (sample) => sample.five, rolled.startAt);
     five = analyzeWindow(
-      { current: rolled.current, startAt: rolled.startAt, resetAt: rolled.resetAt, points, lookbackMs: HOUR_MS, minSpanMs: 15 * 60_000 },
+      {
+        current: rolled.current,
+        startAt: rolled.startAt,
+        resetAt: rolled.resetAt,
+        points,
+        lookbackMs: HOUR_MS,
+        minSpanMs: 15 * 60_000,
+        minElapsedMs: 30 * 60_000,
+      },
       rows,
       now,
     );

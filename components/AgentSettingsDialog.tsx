@@ -1,15 +1,17 @@
 "use client";
 
-import { ChevronRight, Globe, LogIn, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ChevronRight, Globe, GripVertical, LogIn, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { kindInfo } from "@/lib/agents";
-import { providerIconKey, writeProviderIcon, type BrandIcons } from "@/lib/brand";
+import { agentIcon, providerIconKey, writeAgentIcon, writeProviderIcon, type BrandIcons } from "@/lib/brand";
 import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
 import { officialModelsNeedRefresh, syncAgentEndpointModels } from "@/lib/sync-agent-models";
 import type { AgentAuthMode, AgentKind, PublicAgent, PublicEndpoint } from "@/lib/types";
 import type { CliAuthKind, CliAuthStatus } from "@/types/desktop";
 import { useT } from "./I18n";
+import { OrderButtons } from "./OrderButtons";
+import { moveItem, useDragOrder } from "./useDragOrder";
 import { ProviderIconField } from "./ProviderIconField";
 
 type Props = {
@@ -85,6 +87,29 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
       window.clearInterval(timer);
     };
   }, [agent.kind, authBusy, command]);
+
+  const drag = useDragOrder((from, to) => {
+    setEndpoints((current) => {
+      // 全局接口的顺序归「全局提供商」那页管，拖到它身上/把它拖走都不算数
+      if (current[from]?.global || current[to]?.global) return current;
+      return moveItem(current, from, to);
+    });
+  });
+
+  /** 接口排序。全局接口是从池子里合并进来的，顺序在「全局提供商」那页调，这里跳过。 */
+  function moveEndpoint(id: string, step: number) {
+    setEndpoints((current) => {
+      const list = [...current];
+      const index = list.findIndex((item) => item.id === id);
+      if (index < 0 || list[index].global) return current;
+      const locals = list.map((item, at) => (item.global ? -1 : at)).filter((at) => at >= 0);
+      const seat = locals.indexOf(index);
+      const target = locals[seat + step];
+      if (seat < 0 || target == null) return current;
+      [list[index], list[target]] = [list[target], list[index]];
+      return list;
+    });
+  }
 
   function updateEndpoint(id: string, patch: Partial<EndpointDraft>) {
     setEndpoints((current) =>
@@ -290,6 +315,19 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
         />
       </label>
 
+      <div className="block">
+        <p className="mb-1 text-xs leading-5 text-muted">
+          {t("左边 Agent 列表里显示的小图标。可以挑预设的，也可以自己上传或填图片网址；留空就按这家 CLI 的品牌画。")}
+        </p>
+        <ProviderIconField
+          key={`agent-${agent.id}`}
+          ownerId={agent.id}
+          icon={agentIcon(icons, agent.id) || ""}
+          onIcon={(icon) => onIcons?.(writeAgentIcon(icons, agent.id, icon))}
+          onToast={onToast}
+        />
+      </div>
+
       <label className="block">
         <span className="mb-1.5 block text-sm font-medium">{t("可执行文件")}</span>
         <input
@@ -326,16 +364,28 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
           {t("用备注区分多个第三方接口。当前选中的接口会用于新工作。")}
         </p>
         <div className="space-y-3">
-          {endpoints.map((item) => {
+          {endpoints.map((item, index) => {
             const active = item.id === activeId;
+            const localIds = endpoints.filter((entry) => !entry.global).map((entry) => entry.id);
             return (
               <div
                 key={item.id}
-                className={`rounded-2xl border p-3 ${
+                {...(item.global ? {} : drag.rowProps(index))}
+                className={`group rounded-2xl border p-3 ${
                   active ? "border-accent bg-user/60" : "border-line"
-                }`}
+                } ${item.global ? "" : drag.rowClass(index)}`}
               >
                 <div className="mb-2 flex flex-wrap items-center gap-2">
+                  {item.global ? null : (
+                    <span
+                      {...drag.handleProps(index)}
+                      title={t("拖动排序")}
+                      aria-hidden="true"
+                      className="grid size-6 shrink-0 cursor-grab place-items-center rounded text-muted opacity-40 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                    >
+                      <GripVertical className="size-3.5" />
+                    </span>
+                  )}
                   {item.global ? (
                     <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-medium">
                       <Globe className="size-3.5 shrink-0 text-muted" />
@@ -352,6 +402,15 @@ export function AgentSettingsPanel({ agent, onChanged, onLogin, onToast, icons =
                       }
                       placeholder={t("备注")}
                       className="min-w-0 flex-1 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+                    />
+                  )}
+                  {item.global ? null : (
+                    <OrderButtons
+                      upLabel={t("上移")}
+                      downLabel={t("下移")}
+                      first={localIds[0] === item.id}
+                      last={localIds[localIds.length - 1] === item.id}
+                      onMove={(step) => moveEndpoint(item.id, step)}
                     />
                   )}
                   <button

@@ -1,10 +1,12 @@
 "use client";
 
-import { ChevronRight, Globe, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ChevronRight, Globe, GripVertical, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useConfirm } from "./ConfirmDialog";
 import { providerIconKey, writeProviderIcon, type BrandIcons } from "@/lib/brand";
 import { useT } from "./I18n";
+import { OrderButtons } from "./OrderButtons";
+import { moveItem, useDragOrder } from "./useDragOrder";
 import { ProviderIconField } from "./ProviderIconField";
 import type { PublicEndpoint } from "@/lib/types";
 
@@ -37,6 +39,14 @@ export function GlobalEndpointsPanel({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
+
+  /** 调整接口顺序。这里只动草稿，点保存才写回去（和这一页别的改动一个规矩）。 */
+  function move(index: number, step: number) {
+    setDrafts((current) => moveItem(current, index, index + step));
+  }
+
+  const drag = useDragOrder((from, to) => setDrafts((current) => moveItem(current, from, to)));
+
   const [freshIds, setFreshIds] = useState<Record<string, true>>({});
   const [modelsOpen, setModelsOpen] = useState<Record<string, boolean>>({});
   const iconsRef = useRef(icons);
@@ -186,14 +196,34 @@ export function GlobalEndpointsPanel({
         </p>
       ) : (
         <div className="space-y-3">
-          {drafts.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-line p-3">
+          {drafts.map((item, index) => (
+            <div
+              key={item.id}
+              {...drag.rowProps(index)}
+              className={`group rounded-2xl border border-line p-3 ${drag.rowClass(index)}`}
+            >
               <div className="mb-2 flex flex-wrap items-center gap-2">
+                {/* 手柄单独 draggable：整行可拖的话，备注框里划词会变成拖行 */}
+                <span
+                  {...drag.handleProps(index)}
+                  title={t("拖动排序")}
+                  aria-hidden="true"
+                  className="grid size-6 shrink-0 cursor-grab place-items-center rounded text-muted opacity-40 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                >
+                  <GripVertical className="size-3.5" />
+                </span>
                 <input
                   value={item.label}
                   onChange={(event) => update(item.id, { label: event.target.value })}
                   placeholder={t("备注，例如「我的中转站」")}
                   className="min-w-0 flex-1 rounded-lg border border-line bg-elevated px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+                />
+                <OrderButtons
+                  upLabel={t("上移")}
+                  downLabel={t("下移")}
+                  first={index === 0}
+                  last={index === drafts.length - 1}
+                  onMove={(step) => move(index, step)}
                 />
                 <button
                   type="button"

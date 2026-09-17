@@ -1,6 +1,6 @@
 "use client";
 
-import { LogIn, Plus, Trash2, X } from "lucide-react";
+import { GripVertical, LogIn, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   officialSpecForProvider,
@@ -9,7 +9,7 @@ import {
 } from "@/lib/official-chat";
 import { getDesktop } from "@/lib/desktop";
 import { detectReasoning } from "@/lib/reasoning";
-import { providerIconKey, writeProviderIcon } from "@/lib/brand";
+import { agentIcon, providerIconKey, writeProviderIcon } from "@/lib/brand";
 import { PROVIDER_TEMPLATES } from "@/lib/templates";
 
 import type { AppPrefs, ManagedSkill, ModelRef, ProviderAuth, PublicAgent, PublicProvider } from "@/lib/types";
@@ -21,6 +21,8 @@ import { useT } from "./I18n";
 import { AgentSettingsPanel } from "./AgentSettingsDialog";
 import { GlobalEndpointsPanel } from "./GlobalEndpoints";
 import { ModelIcon, ServiceIcon } from "./ModelIcon";
+import { OrderButtons } from "./OrderButtons";
+import { moveItem, useDragOrder } from "./useDragOrder";
 import { ProviderIconField } from "./ProviderIconField";
 import { GeneralSettings } from "./GeneralSettings";
 import { ImagineSettings } from "./ImagineSettings";
@@ -171,6 +173,23 @@ export function SettingsDialog({
     iconsRef.current = next;
     onPrefs({ brandIcons: next });
   }
+
+  /** 调整服务顺序。后端按 id 列表重排，重排完刷新列表。 */
+  async function reorderProviders(next: PublicProvider[]) {
+    if (next === providers) return;
+    try {
+      await fetch("/api/providers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: next.map((item) => item.id) }),
+      });
+      await onChanged();
+    } catch {
+      onToast?.(t("排序没保存成功"));
+    }
+  }
+
+  const providerDrag = useDragOrder((from, to) => void reorderProviders(moveItem(providers, from, to)));
 
   function selectProvider(id: string) {
     const current = providers.find((item) => item.id === id);
@@ -478,7 +497,10 @@ export function SettingsDialog({
                       agentId === item.id ? "bg-user" : "hover:bg-user/70"
                     }`}
                   >
-                    <div className="truncate text-sm font-medium">{item.name}</div>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <AgentAvatar agentId={item.id} kind={item.kind} icons={prefs?.brandIcons ?? {}} />
+                      <span className="truncate text-sm font-medium">{item.name}</span>
+                    </div>
                     <div className="truncate text-[11px] text-muted">
                       {(item.endpoints?.length || 0) > 0
                         ? t("{n} 个接口", { n: item.endpoints.length })
@@ -533,32 +555,56 @@ export function SettingsDialog({
               <Plus className="size-4" />
               {t("添加服务")}
             </button>
-            {providers.map((provider) => (
-              <button
+            {providers.map((provider, index) => (
+              // 一行拆成三块：拖动手柄 + 选中按钮 + 上下移（按钮不能嵌套，所以不能都塞进选中按钮里）
+              <div
                 key={provider.id}
-                type="button"
-                onClick={() => selectProvider(provider.id)}
-                className={`mb-1 w-full rounded-xl px-3 py-2 text-left ${
+                {...providerDrag.rowProps(index)}
+                className={`group mb-1 flex items-center gap-0.5 rounded-xl pr-1 ${
                   selectedId === provider.id ? "bg-user" : "hover:bg-user/70"
-                }`}
+                } ${providerDrag.rowClass(index)}`}
               >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <ServiceIcon
-                    providerId={provider.id}
-                    baseUrl={provider.baseUrl}
-                    icons={prefs?.brandIcons ?? {}}
-                    className="size-4"
+                <span
+                  {...providerDrag.handleProps(index)}
+                  title={t("拖动排序")}
+                  aria-hidden="true"
+                  className="grid w-4 shrink-0 cursor-grab place-items-center text-muted opacity-40 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+                >
+                  <GripVertical className="size-3.5" />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => selectProvider(provider.id)}
+                  className="min-w-0 flex-1 rounded-xl px-3 py-2 text-left"
+                >
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <ServiceIcon
+                      providerId={provider.id}
+                      baseUrl={provider.baseUrl}
+                      icons={prefs?.brandIcons ?? {}}
+                      className="size-4"
+                    />
+                    <span className="truncate text-sm font-medium">{t(provider.name)}</span>
+                  </div>
+                  <div className="truncate text-[11px] text-muted">
+                    {officialSpecForProvider(provider)
+                      ? officialStatus[officialSpecForProvider(provider)!.kind]?.loggedIn
+                        ? t("已登录 · {n} 个模型", { n: provider.models.length })
+                        : t("官方登录")
+                      : t("{n} 个模型", { n: provider.models.length })}
+                  </div>
+                </button>
+                {/* 拖拽是鼠标的路子，键盘走这两个按钮 —— 所以聚焦时也要显示出来 */}
+                <span className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  <OrderButtons
+                    upLabel={t("上移 {name}", { name: provider.name })}
+                    downLabel={t("下移 {name}", { name: provider.name })}
+                    first={index === 0}
+                    last={index === providers.length - 1}
+                    onMove={(step) => void reorderProviders(moveItem(providers, index, index + step))}
                   />
-                  <span className="truncate text-sm font-medium">{t(provider.name)}</span>
-                </div>
-                <div className="truncate text-[11px] text-muted">
-                  {officialSpecForProvider(provider)
-                    ? officialStatus[officialSpecForProvider(provider)!.kind]?.loggedIn
-                      ? t("已登录 · {n} 个模型", { n: provider.models.length })
-                      : t("官方登录")
-                    : t("{n} 个模型", { n: provider.models.length })}
-                </div>
-              </button>
+                </span>
+              </div>
             ))}
           </aside>
 
@@ -843,4 +889,16 @@ export function SettingsDialog({
       </div>
     </div>
   );
+}
+
+/** Agent 列表左边的小图标：用户自己配的优先，没配就按这家 CLI 的品牌画。 */
+function AgentAvatar({ agentId, kind, icons }: { agentId: string; kind: string; icons: Record<string, string> }) {
+  const own = agentIcon(icons, agentId);
+  if (own) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 用户自己配的图标，可能是任意来源
+      <img src={own} alt="" aria-hidden="true" className="size-4 shrink-0 rounded-[4px] object-contain" />
+    );
+  }
+  return <ModelIcon modelId={kind} icons={{}} className="size-4" />;
 }

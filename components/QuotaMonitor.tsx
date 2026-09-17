@@ -310,7 +310,12 @@ function healthDetail(report: AccountReport, now: number, f: Format, t: Translat
         early: f.span((main?.resetAt ?? 0) - (main?.etaAt ?? 0)),
       });
     case "tight":
-      return t("按这周的节奏，重置时会用到 {p}，接近上限。", { p: f.pct(main?.projectedAtReset) });
+      return main?.etaFastAt != null && (main.projectedHigh ?? 0) >= 100
+        ? t("按整周平均，重置时约 {p}；但按最近一天的节奏，最快 {time} 就会用完。", {
+            p: f.pct(main.projectedAtReset),
+            time: f.when(main.etaFastAt),
+          })
+        : t("按这周的节奏，重置时会用到 {p}，接近上限。", { p: f.pct(main?.projectedAtReset) });
     case "five-hour-high":
       return t("5 小时窗口已用 {p}，短时间内再大量使用可能会被限速。", { p: f.pct(report.five?.used) });
     default:
@@ -343,11 +348,11 @@ function buildTiles(report: AccountReport, now: number, f: Format, t: Translate)
       value: perHour(main.ratePerH),
       sub:
         main.activeShare != null
-          ? t("含休息 · 大约每天用 {n} 小时 · 最近 {a}", {
+          ? t("墙钟平均（含休息）· 大约每天用 {n} 小时 · 最近一天 {a}", {
               n: Math.max(1, Math.round(main.activeShare * 24)),
               a: perHour(main.recentPerH),
             })
-          : t("含休息的平均 · 最近 {a}", { a: perHour(main.recentPerH) }),
+          : t("墙钟平均（含休息）· 最近一天 {a}", { a: perHour(main.recentPerH) }),
     });
 
     const exhausted = main.used >= 100;
@@ -366,7 +371,13 @@ function buildTiles(report: AccountReport, now: number, f: Format, t: Translate)
         : runsOut
           ? t("约 {d}后", { d: f.span((main.etaAt ?? now) - now) })
           : main.projectedAtReset != null
-            ? t("重置时约 {p}", { p: f.pct(Math.min(main.projectedAtReset, 999)) })
+            ? main.etaFastAt != null && (main.projectedHigh ?? 0) >= 100
+              ? // 平均说用不完、但最近在加速：把「最快」也说出来，别只报一个乐观数
+                t("重置时约 {p} · 最快 {time}", {
+                  p: f.pct(Math.min(main.projectedAtReset, 999)),
+                  time: f.when(main.etaFastAt),
+                })
+              : t("重置时约 {p}", { p: f.pct(Math.min(main.projectedAtReset, 999)) })
             : t("采样跨度还不够"),
     });
 
@@ -398,6 +409,39 @@ function buildTiles(report: AccountReport, now: number, f: Format, t: Translate)
       value: `${f.count(main.usedTokens)} token`,
       cn: f.cn(main.usedTokens),
       sub: main.usedCostUsd > 0 ? t("按 API 价约 {m}", { m: f.money(main.usedCostUsd) }) : undefined,
+    });
+  }
+  /*
+   * 5 小时窗口单独给一组：上面那几张卡都是按 main（有周窗口就是周）算的，
+   * 5 小时的折合和消耗会被盖掉。只有两个窗口都在时才补 —— 像 Grok 只有周额度，
+   * 没有 five，这一组整个不显示。
+   */
+  if (week && five) {
+    const cap = five.capacity;
+    if (cap) {
+      const confidence = t(CONFIDENCE[cap.confidence]);
+      tiles.push(
+        cap.costUsd > 0
+          ? {
+              label: t("5 小时额度折合"),
+              value: f.money(cap.costUsd),
+              sub: t("≈ {n} token · 可信度{c}", { n: tokens(cap.tokens), c: confidence }),
+            }
+          : {
+              label: t("5 小时额度折合"),
+              value: `${f.count(cap.tokens)} token`,
+              cn: f.cn(cap.tokens),
+              sub: t("可信度{c}", { c: confidence }),
+            },
+      );
+    } else {
+      tiles.push({ label: t("5 小时额度折合"), value: "—", sub: t("已用 2% 以上、且本机有这个账号的用量后才能估") });
+    }
+    tiles.push({
+      label: t("这 5 小时已消耗"),
+      value: `${f.count(five.usedTokens)} token`,
+      cn: f.cn(five.usedTokens),
+      sub: five.usedCostUsd > 0 ? t("按 API 价约 {m}", { m: f.money(five.usedCostUsd) }) : resetSub(five),
     });
   }
   if (report.resetCredits != null) tiles.push({ label: t("可用重置次数"), value: String(report.resetCredits) });
@@ -861,7 +905,7 @@ function Notes({ kind, sessions }: { kind: AccountKind; sessions: Sessions }) {
           { n: sessions.included },
         )
       : kind === "chatgpt"
-        ? t("Codex 会话：看每个会话自己记录的 model_provider，只算 openai 的。已计入 {a} 个，排除走中转的 {b} 个。", {
+        ? t("Codex 会话：按 ~/.codex/config.toml 里那个 provider 块怎么配来判断（要走 OAuth、自己没有 Key 和地址才算官方），不是看它叫什么名字。已计入 {a} 个，排除 {b} 个。", {
             a: sessions.included,
             b: sessions.excluded,
           })

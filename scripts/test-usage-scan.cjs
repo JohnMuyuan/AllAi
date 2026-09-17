@@ -188,8 +188,30 @@ try {
     { type: "event_msg", timestamp: RECENT, payload: { type: "thread_settings_applied", thread_settings: { model: "gpt-6-astra" } } },
     { type: "token_usage_record", timestamp: RECENT, payload: { response_id: "r", usage: { input_tokens: 50, output_tokens: 5 } } },
   ];
+  // 「官方」不是看名字，是看配置块怎么写：用户完全可以把官方直登的那套叫 custom
+  const codexNamedCustom = path.join(home, ".codex", "sessions", "2026", "rollout-custom.jsonl");
+  const codexGone = path.join(home, ".codex", "sessions", "2026", "rollout-gone.jsonl");
   write(codexOfficial, codexLines("openai"));
-  write(codexRelay, codexLines("custom"));
+  write(codexRelay, codexLines("relay"));
+  write(codexNamedCustom, codexLines("custom"));
+  write(codexGone, codexLines("已经删掉的块"));
+  fs.mkdirSync(path.join(home, ".codex"), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, ".codex", "config.toml"),
+    [
+      'model_provider = "custom"',
+      "[model_providers.custom]",
+      'name = "OpenAI"',
+      "requires_openai_auth = true",
+      "[model_providers.relay]",
+      'name = "Relay"',
+      'base_url = "https://relay.example/v1"',
+      'env_key = "RELAY_KEY"',
+    ].join(String.fromCharCode(10)),
+  );
+  const codexAuth = path.join(home, ".codex", "auth.json");
+  const oauthLogin = JSON.stringify({ auth_mode: "chatgpt", OPENAI_API_KEY: null, tokens: { access_token: "t" } });
+  fs.writeFileSync(codexAuth, oauthLogin);
   const claudeRecent = path.join(home, ".claude", "projects", "proj", "s-recent.jsonl");
   write(claudeRecent, [{ ...claudeLine(1, 2, 3, 4, "req_recent"), timestamp: RECENT }]);
   // Grok 配了中转地址：它的会话文件里不记走哪个接口，只能按全局配置当成「不是官方」
@@ -205,10 +227,41 @@ try {
   scanLocalUsage();
   let files = readRollups().files;
   check(
-    "Codex：session_meta 是 openai 的算官方，custom 的不算",
-    files[codexOfficial]?.official === true && files[codexRelay]?.official === false && files[codexOfficial]?.kind === "codex",
-    JSON.stringify({ o: files[codexOfficial]?.official, r: files[codexRelay]?.official }),
+    "Codex：官方看的是 provider 配置块（叫 custom 也算官方），带 base_url/env_key 的中转不算",
+    files[codexOfficial]?.official === true &&
+      files[codexNamedCustom]?.official === true &&
+      files[codexRelay]?.official === false &&
+      files[codexOfficial]?.kind === "codex",
+    JSON.stringify({ openai: files[codexOfficial]?.official, custom: files[codexNamedCustom]?.official, relay: files[codexRelay]?.official }),
   );
+  check(
+    "Codex：配置里已经没有的名字，按本机是不是 ChatGPT 登录兜底",
+    files[codexGone]?.official === true,
+    String(files[codexGone]?.official),
+  );
+  check("Codex：见过的判定会记到账本里", readRollups().codexProviders?.relay === false && readRollups().codexProviders?.custom === true, JSON.stringify(readRollups().codexProviders));
+
+  // 改配置 / 换登录方式都不会碰会话文件，但归属必须跟着变（以前只在文件变动时才重算）
+  fs.writeFileSync(
+    path.join(home, ".codex", "config.toml"),
+    ["[model_providers.custom]", 'name = "Relay"', 'base_url = "https://relay.example/v1"', 'env_key = "RELAY_KEY"'].join(String.fromCharCode(10)),
+  );
+  scanLocalUsage();
+  check("Codex：同名配置块改成中转后，文件没动也要翻成不算", readRollups().files[codexNamedCustom]?.official === false, String(readRollups().files[codexNamedCustom]?.official));
+  fs.rmSync(path.join(home, ".codex", "config.toml"), { force: true });
+  scanLocalUsage();
+  check("Codex：配置块被删掉，仍按记住的判定（不会翻回官方）", readRollups().files[codexNamedCustom]?.official === false);
+  fs.writeFileSync(codexAuth, JSON.stringify({ auth_mode: "apikey", OPENAI_API_KEY: "sk-test" }));
+  scanLocalUsage();
+  check(
+    "Codex：改用 API Key 跑的账记在 API 上，一律不算订阅额度",
+    // 认不出 provider 的（没有 session_meta）是 undefined，同样不算官方
+    Object.values(readRollups().files).every((item) => item.kind !== "codex" || item.official !== true),
+    JSON.stringify(Object.values(readRollups().files).filter((i) => i.kind === "codex").map((i) => i.official)),
+  );
+  fs.writeFileSync(codexAuth, oauthLogin);
+  scanLocalUsage();
+  files = readRollups().files;
   // 0.17.5 的旧缓存可能把官方文件记成 false；升级后要重读近期文件头并纠正归属。
   const stale = readRollups();
   stale.files[codexOfficial].v = 2;

@@ -1185,24 +1185,44 @@ export async function deleteWork(
     }
     const file = work.messagesFile;
     if (!file || !exists(file)) return { ok: false, error: "找不到这条会话的文件" };
-    if (!file.endsWith(".jsonl")) return { ok: false, error: "这个文件不像会话记录，没有删除" };
     const expectedRoot =
       work.kind === "claude-code"
         ? path.join(os.homedir(), ".claude", "projects")
         : work.kind === "codex"
           ? path.join(os.homedir(), ".codex", "sessions")
           : "";
-    if (!expectedRoot || !insideDir(expectedRoot, file)) {
-      return { ok: false, error: "会话文件不在对应的历史目录中，没有删除" };
+    if (!expectedRoot) return { ok: false, error: "不认识这种会话，没有删除" };
+    /*
+     * codex 的一条会话会被拆成多个 rollout 文件（见 scanCodex 按 cliSessionId 分组）。
+     * 只删 messagesFile 那一个，剩下的分片下次扫描又会凑成同一条会话 ——
+     * 用户看到的就是「删了，过一会儿又回来」。所以这里删的是整条会话的全部分片。
+     */
+    const targets = work.kind === "codex" ? codexParts(work) : [file];
+    for (const target of targets) {
+      if (!target.endsWith(".jsonl")) return { ok: false, error: "这个文件不像会话记录，没有删除" };
+      if (!insideDir(expectedRoot, target)) {
+        return { ok: false, error: "会话文件不在对应的历史目录中，没有删除" };
+      }
     }
-    fs.rmSync(file, { force: true });
-    forget(file);
+    for (const target of targets) {
+      fs.rmSync(target, { force: true });
+      forget(target);
+      pruneEmptyDir(path.dirname(target));
+    }
     if (work.kind === "codex") dropCodexIndex(work.cliSessionId);
-    pruneEmptyDir(path.dirname(file));
     return { ok: true, how: "文件" };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "删除失败" };
   }
+}
+
+/** codex 一条会话的全部 rollout 分片；列表没带过来就按会话 id 现找。 */
+function codexParts(work: AgentWork): string[] {
+  if (work.kind !== "codex") return work.messagesFile ? [work.messagesFile] : [];
+  const listed = work.messagesFiles?.length
+    ? work.messagesFiles
+    : listCodexRollouts(work.cliSessionId, work.messagesFile || "");
+  return [...new Set(listed.filter(Boolean))];
 }
 
 function insideDir(root: string, target: string) {
@@ -1216,7 +1236,8 @@ async function deleteViaCli(work: AgentWork): Promise<boolean> {
   if (!id || id.startsWith("live-")) return false;
   const args =
     work.kind === "codex"
-      ? ["delete", id]
+      ? // 0.154.0 起非交互终端必须带 --force，否则拒绝删除（而且照样退出 0）
+        ["delete", "--force", id]
       : work.kind === "grok-build"
         ? ["sessions", "delete", id]
         : null;
@@ -1230,7 +1251,9 @@ async function deleteViaCli(work: AgentWork): Promise<boolean> {
       windowsHide: true,
       windowsVerbatimArguments: inv.verbatim,
     });
-    // 命令说成功了也得核实：文件真没了才算数。
+    // 命令说成功了也得核实：**所有**分片都没了才算数（codex 一条会话会拆成多个文件）。
+    const parts = codexParts(work);
+    if (parts.length) return parts.every((item) => !exists(item));
     return !work.messagesFile || !exists(work.messagesFile);
   } catch {
     return false;

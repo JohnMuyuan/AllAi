@@ -103,6 +103,15 @@ export async function analyzeCollectedOutputs(opts: {
     family: result.familyPrediction,
     probability: result.probability,
     mismatch,
+    // 排名前几名一起存下来：界面要能说清「更像谁、差多少」
+    candidates: result.results.slice(0, 5).map((item) => ({
+      model: item.model,
+      name: item.displayName,
+      probability: item.probability,
+    })),
+    usedOutputs: result.usedOutputs,
+    queries: opts.outputs.length,
+    familyProbability: result.familyProbability,
     conversationId: opts.conversationId,
     messageId: opts.messageId,
     source: opts.source || "manual",

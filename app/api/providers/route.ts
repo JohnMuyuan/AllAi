@@ -48,6 +48,22 @@ export async function GET() {
   return NextResponse.json({ providers: db.providers.map(toPublicProvider) });
 }
 
+
+/** 调整服务顺序。界面上的 ↑↓ 只发 id 列表过来，没列到的保持原有相对次序排在后面。 */
+export async function PUT(request: Request) {
+  const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
+  const ids = Array.isArray(body?.ids) ? body.ids.filter((item): item is string => typeof item === "string") : null;
+  if (!ids) return NextResponse.json({ error: "缺少顺序" }, { status: 400 });
+  const providers = await updateDb((db) => {
+    const byId = new Map(db.providers.map((item) => [item.id, item]));
+    const ordered = ids.map((id) => byId.get(id)).filter((item): item is (typeof db.providers)[number] => Boolean(item));
+    const rest = db.providers.filter((item) => !ids.includes(item.id));
+    db.providers = [...ordered, ...rest];
+    return db.providers;
+  });
+  return NextResponse.json({ providers: providers.map(toPublicProvider) });
+}
+
 export async function POST(request: Request) {
   const body = (await request.json()) as {
     name?: string;

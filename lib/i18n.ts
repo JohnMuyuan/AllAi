@@ -1427,6 +1427,60 @@ const EN: Record<string, string> = {
   "额度折合 = 这个窗口里用掉的量 ÷ 官方显示的已用百分比。已用越多越准；花费按各家 API 公开价估算，不是账单。": "Quota worth = usage in this window ÷ the used percentage shown by the provider. The more you have used, the more accurate it is. Cost is estimated from public API prices and is not a bill.",
   "预测按这周实际节奏（已用百分比 ÷ 已经过的时间），把休息算进去，不会假设你 24 小时不停用。":
     "The forecast uses this week’s actual pace (used % ÷ elapsed time), so rest is included. It does not assume you run 24 hours a day.",
+
+  /* 额度预测的区间说明（0.17.7） */
+  "墙钟平均（含休息）· 大约每天用 {n} 小时 · 最近一天 {a}": "Wall-clock average (idle included) · about {n} h/day · last day {a}",
+  "墙钟平均（含休息）· 最近一天 {a}": "Wall-clock average (idle included) · last day {a}",
+  "重置时约 {p} · 最快 {time}": "About {p} at reset · soonest {time}",
+  "按整周平均，重置时约 {p}；但按最近一天的节奏，最快 {time} 就会用完。": "On the week average you reach about {p} by reset, but at the pace of the last day it could run out as soon as {time}.",
+
+  /* 溯源界面（0.17.7） */
+  "最近 {n} 次里有 {m} 次对不上（{p}%）": "{m} of the last {n} checks did not match ({p}%)",
+  "发一条 OpenAI 或 Claude 的聊天，或者在下面手动探测一次。": "Send an OpenAI or Claude message, or run a manual check below.",
+  "上次探测": "Last check",
+  "探测目标": "Target",
+  "手动探测 3 次": "Run 3 checks",
+  "累计探测": "Checks so far",
+  "自动 {a} · 手动 {m}": "{a} automatic · {m} manual",
+  "对不上": "Mismatched",
+  "占 {p}%": "{p}% of all checks",
+  "平均把握": "Average confidence",
+  "指纹和第一名的接近程度": "How closely the fingerprint matches the top model",
+  "覆盖型号": "Models checked",
+  "你实际测过的型号数": "How many models you have actually checked",
+  "最近 {n} 天": "Last {n} days",
+  "每天探测了几次、其中几次对不上": "Checks per day, and how many did not match",
+  "按型号": "By model",
+  "你选的型号，和指纹实际判成的型号": "The model you picked versus what the fingerprint says",
+  "详细记录": "Check history",
+  "点一条展开候选排名": "Open one to see the ranked candidates",
+  "指纹库覆盖 {n} 个型号，构建于 {date}；判定完全在本机完成，不上传任何内容。": "The fingerprint library covers {n} models and was built on {date}. Matching happens entirely on this computer and nothing is uploaded.",
+  "指纹库和算法来自 ModelTrace（MIT）。库里没有的型号（比如 Grok）不测。": "Fingerprints and method come from ModelTrace (MIT). Models it does not cover, such as Grok, are not checked.",
+  "最近每天的探测结果": "Daily check results",
+  "相符": "Matched",
+  "日期": "Date",
+  "{n} 次 · 对不上 {m} 次": "{n} checks · {m} mismatched",
+  "最常判成：{name}（{n} 次）": "Most often identified as {name} ({n} times)",
+  "{a}/{b} 条有效回答": "{a}/{b} usable answers",
+  "这条是旧记录，没有存候选排名。再测一次就有了。": "This older record has no ranked candidates. Run another check to get them.",
+  "判定为 {family} 家族的把握 {p}%": "{p}% confidence it belongs to the {family} family",
+
+  /* Codex 归属说明（0.17.7） */
+  "Codex 会话：按 ~/.codex/config.toml 里那个 provider 块怎么配来判断（要走 OAuth、自己没有 Key 和地址才算官方），不是看它叫什么名字。已计入 {a} 个，排除 {b} 个。": "Codex sessions are judged by how their provider block is configured in ~/.codex/config.toml (official means it uses OAuth and has no key or address of its own), not by what the block is called. {a} included, {b} excluded.",
+
+  /* 排序、Agent 图标、溯源清空（0.17.7） */
+  "上移": "Move up",
+  "下移": "Move down",
+  "上移 {name}": "Move {name} up",
+  "下移 {name}": "Move {name} down",
+  "排序没保存成功": "Could not save the new order",
+  "左边 Agent 列表里显示的小图标。可以挑预设的，也可以自己上传或填图片网址；留空就按这家 CLI 的品牌画。": "The small icon shown in the agent list on the left. Pick a preset, upload your own, or paste an image URL. Leave it empty to use this CLI brand icon.",
+  "清空重测": "Clear and retest",
+  "清空 {n} 条探测记录？": "Clear {n} check records?",
+  "统计和趋势都会归零，无法恢复。指纹库和自动探测开关不受影响。": "Stats and trends reset to zero and cannot be recovered. The fingerprint library and the automatic check setting are untouched.",
+  "已清空探测记录": "Check records cleared",
+
+  "拖动排序": "Drag to reorder",
 };
 
 

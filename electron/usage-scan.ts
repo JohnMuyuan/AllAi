@@ -64,9 +64,11 @@ type FileState = {
   lastId?: string;
   /** 哪家 CLI 的会话。额度监控按它把用量对到官方账号上。 */
   kind?: Kind;
+  /** 会话头里的 `model_provider` —— 也就是 config.toml 里那个配置块的名字。 */
+  provider?: string;
   /**
    * 这个会话是不是走官方登录账号（而不是 API Key / 中转站）。额度监控只算这种。
-   * Codex 看文件开头 session_meta 的 model_provider（每个会话自己记了，准）；
+   * Codex 看 provider 配置块怎么写，不是看名字长什么样，见 isOfficialCodexProvider；
    * Claude Code / Grok 的会话文件里没记，只能看它们的全局配置，见 configOfficial。
    * undefined = 还没判断出来（比如 Codex 还没读到 session_meta）。
    */
@@ -91,6 +93,12 @@ export type UsageRollups = {
   files: Record<string, FileState>;
   /** 外部导入的历史（目前只有 cc-switch），结构同 DayBuckets。 */
   imports: Record<string, { at: number; days: DayBuckets }>;
+  /**
+   * 见过的 Codex provider 判定（名字 → 是不是官方订阅）。
+   * 配置块删掉或改名之后，历史会话就只剩一个名字了 —— 记着当时的结论，
+   * 免得一个中转站的旧会话在配置消失后被当成官方额度算进去。
+   */
+  codexProviders?: Record<string, boolean>;
 };
 
 
@@ -103,14 +111,19 @@ function rollupFile() {
 }
 
 export function emptyRollups(): UsageRollups {
-  return { version: 1, files: {}, imports: {} };
+  return { version: 1, files: {}, imports: {}, codexProviders: {} };
 }
 
 export function readRollups(): UsageRollups {
   try {
     const parsed = JSON.parse(fs.readFileSync(rollupFile(), "utf8")) as UsageRollups;
     if (parsed?.version !== 1) return emptyRollups();
-    return { version: 1, files: parsed.files ?? {}, imports: parsed.imports ?? {} };
+    return {
+      version: 1,
+      files: parsed.files ?? {},
+      imports: parsed.imports ?? {},
+      codexProviders: parsed.codexProviders ?? {},
+    };
   } catch {
     return emptyRollups();
   }
@@ -296,9 +309,90 @@ function codexRow(obj: Record<string, unknown>): Row | null {
   };
 }
 
-function isOfficialCodexProvider(value: string) {
+/**
+ * 这个 Codex 会话走的是不是官方 ChatGPT 订阅。
+ *
+ * **不能只看 `model_provider` 的字面值**。那是 `~/.codex/config.toml` 里配置块的名字，
+ * 用户完全可以把官方登录的那一套叫 `custom`（实测就是这样）：
+ *
+ *     [model_providers.custom]
+ *     name = "OpenAI"
+ *     requires_openai_auth = true      ← 走 OAuth，吃订阅额度
+ *
+ * 0.17.6 只认 openai / chatgpt / openai-codex，于是把这种会话全判成中转，
+ * 「周额度折合」永远算不出来（用户：「我明明是官方直登」）。
+ *
+ * 现在按配置判断：
+ *   - 配置里有这个块 → 看它自己怎么写（要 OAuth 且没有自己的 Key / 地址才算官方）；
+ *   - 没有这个块，但名字是内置的 openai / chatgpt → 官方；
+ *   - 块已经被删掉、名字也不认识 → 看本机是不是 ChatGPT 登录（`auth.json` 有 token、没有 API Key）。
+ *     历史会话的配置块常常早就没了，这时登录方式是唯一还能查的证据。
+ * 另外只要 Codex 是用 API Key 跑的，账就记在 API 上，一律不算订阅额度。
+ */
+type CodexProviderRule = { official: boolean };
+
+function parseCodexProviders(toml: string) {
+  const rules = new Map<string, CodexProviderRule>();
+  let current = "";
+  let block: Record<string, string> = {};
+  const flush = () => {
+    if (!current) return;
+    const base = block.base_url || "";
+    const host = (base.match(/^https?:\/\/([^/]+)/i) || [])[1] || "";
+    const openaiHost = /(^|\.)openai\.com$|(^|\.)chatgpt\.com$/i.test(host);
+    const official =
+      !block.env_key && (block.requires_openai_auth === "true" ? true : !base ? /openai|chatgpt/i.test(block.name || current) : openaiHost);
+    rules.set(current.toLowerCase(), { official });
+    current = "";
+    block = {};
+  };
+  for (const raw of toml.split(String.fromCharCode(10))) {
+    const line = raw.trim();
+    const section = line.match(/^\[([^\]]+)\]$/);
+    if (section) {
+      flush();
+      const name = section[1].match(/^model_providers\.\s*"?([^"]+)"?\s*$/);
+      current = name ? name[1].trim() : "";
+      continue;
+    }
+    if (!current) continue;
+    const pair = line.match(/^([a-z_]+)\s*=\s*(.*)$/i);
+    if (pair) block[pair[1].toLowerCase()] = pair[2].trim().replace(/^["']|["'],?$/g, "");
+  }
+  flush();
+  return rules;
+}
+
+/** 本机 Codex 是不是 ChatGPT 登录（而不是 API Key）。 */
+function codexUsesChatGptLogin() {
+  try {
+    const auth = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".codex", "auth.json"), "utf8")) as {
+      auth_mode?: string;
+      OPENAI_API_KEY?: string | null;
+      tokens?: { access_token?: string };
+    };
+    if (auth.OPENAI_API_KEY) return false;
+    if (typeof auth.auth_mode === "string" && /api.?key/i.test(auth.auth_mode)) return false;
+    return Boolean(auth.tokens?.access_token);
+  } catch {
+    return false;
+  }
+}
+
+function isOfficialCodexProvider(value: string, codex: CodexAuth) {
   const provider = value.trim().toLowerCase();
-  return provider === "openai" || provider === "openai-codex" || provider === "chatgpt";
+  if (!provider) return false;
+  // 用 API Key 跑的账记在 API 上，不占订阅额度
+  if (!codex.chatgptLogin) return false;
+  const rule = codex.rules.get(provider);
+  if (rule) return rule.official;
+  const known = codex.remembered[provider];
+  if (typeof known === "boolean") return known;
+  /*
+   * 配置块已经不在了（换过配置、甚至整个重置过 ~/.codex）。既然本机是 ChatGPT 登录、
+   * 也没有 API Key，这类历史会话最可能就是吃的订阅额度 —— 内置名字更是明确如此。
+   */
+  return true;
 }
 
 /**
@@ -365,7 +459,51 @@ function grokRows(obj: Record<string, unknown>): Row[] {
 /** 一次最多读多少字节，免得单个超大文件把内存吃满。剩下的下一轮接着读。 */
 const MAX_CHUNK = 32 * 1024 * 1024;
 
-function scanFile(file: string, kind: Kind, state: FileState, official: Record<Kind, boolean | undefined>) {
+type CodexAuth = {
+  rules: Map<string, CodexProviderRule>;
+  /** 以前扫描时记下的判定，配置里已经没有的名字靠它。 */
+  remembered: Record<string, boolean>;
+  chatgptLogin: boolean;
+};
+
+function codexAuthContext(remembered: Record<string, boolean>): CodexAuth {
+  let rules = new Map<string, CodexProviderRule>();
+  try {
+    rules = parseCodexProviders(fs.readFileSync(path.join(os.homedir(), ".codex", "config.toml"), "utf8"));
+  } catch {
+    // 没有 config.toml（刚装好、或者刚重置过）：按记住的判定 + 内置名字 + 登录方式来
+  }
+  // 配置里现在写的才算数，顺手更新记忆
+  for (const [name, rule] of rules) remembered[name] = rule.official;
+  return { rules, remembered, chatgptLogin: codexUsesChatGptLogin() };
+}
+
+/**
+ * 判定这个会话归谁。**每次扫描都要重来一遍**，而且要在「文件没变就跳过」之前做：
+ * 用户改配置、重新登录、把中转换成官方，这些都不会碰会话文件本身 ——
+ * 只在文件变动时才更新归属的话，历史会话会一直挂着旧结论（实测：官方直登的
+ * Codex 会话一直被算成中转，「周额度折合」永远算不出来）。
+ * 这里只读文件头（而且只在还不知道 provider 时读），不重扫 token 账。
+ */
+function applyAttribution(
+  file: string,
+  kind: Kind,
+  state: FileState,
+  official: Record<Kind, boolean | undefined>,
+  codex: CodexAuth,
+) {
+  state.kind = kind;
+  if (kind !== "codex") {
+    state.official = official[kind];
+    return;
+  }
+  const provider = state.provider || readCodexProvider(file);
+  if (!provider) return;
+  state.provider = provider;
+  state.official = isOfficialCodexProvider(provider, codex);
+}
+
+function scanFile(file: string, kind: Kind, state: FileState, codex: CodexAuth) {
   let stat: fs.Stats;
   try {
     stat = fs.statSync(file);
@@ -380,15 +518,8 @@ function scanFile(file: string, kind: Kind, state: FileState, official: Record<K
       state.hours = {};
       state.model = undefined;
       state.lastId = undefined;
-      state.official = undefined;
     }
   }
-  state.kind = kind;
-  if (kind === "codex") {
-    const provider = readCodexProvider(file);
-    if (provider) state.official = isOfficialCodexProvider(provider);
-  }
-  if (state.official === undefined && kind !== "codex") state.official = official[kind];
   // 变小了 = 被重写/截断过，之前记的账对不上了：整份清掉重读。
   if (stat.size < state.offset) {
     state.offset = 0;
@@ -396,7 +527,6 @@ function scanFile(file: string, kind: Kind, state: FileState, official: Record<K
     state.hours = {};
     state.model = undefined;
     state.lastId = undefined;
-    if (kind === "codex") state.official = undefined;
   }
   if (stat.size === state.offset) {
     state.size = stat.size;
@@ -438,7 +568,8 @@ function scanFile(file: string, kind: Kind, state: FileState, official: Record<K
       const payload = obj.payload as Record<string, unknown> | undefined;
       // 会话开头那条自己写了走哪家：openai = 官方 ChatGPT 账号，custom 之类 = 中转站。
       if (obj.type === "session_meta" && typeof payload?.model_provider === "string") {
-        state.official = isOfficialCodexProvider(payload.model_provider);
+        state.provider = payload.model_provider;
+        state.official = isOfficialCodexProvider(payload.model_provider, codex);
       }
       if (payload?.type === "thread_settings_applied") {
         const settings = payload.thread_settings as Record<string, unknown> | undefined;
@@ -486,6 +617,7 @@ export function scanLocalUsage(): { files: number; changed: number; skipped: boo
     const rollups = readRollups();
     const alive = new Set<string>();
     const official = configOfficial();
+    const codex = codexAuthContext((rollups.codexProviders ??= {}));
     let changed = 0;
     let files = 0;
     for (const { kind, dir } of roots()) {
@@ -494,9 +626,10 @@ export function scanLocalUsage(): { files: number; changed: number; skipped: boo
         files += 1;
         const state = (rollups.files[file] ??= { size: 0, mtimeMs: 0, offset: 0, days: {} });
         // 大小和改动时间都没变就跳过（新文件的 size/mtime 记的是 0，不会误判成没变）。
+        applyAttribution(file, kind, state, official, codex);
         const stat = safeStat(file);
         if (stat && state.v === STATE_VERSION && stat.size === state.size && stat.mtimeMs === state.mtimeMs) continue;
-        if (scanFile(file, kind, state, official)) changed += 1;
+        if (scanFile(file, kind, state, codex)) changed += 1;
       }
     }
     // CLI 自己清掉的老会话：账留着（那些 token 确实花过），只是不会再更新。

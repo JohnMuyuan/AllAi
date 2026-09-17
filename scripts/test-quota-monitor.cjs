@@ -4,8 +4,9 @@
  *   node scripts/test-quota-monitor.cjs
  *
  * 盯的都是「看起来算出来了、其实是错的」那种：
- *   - 预测用整周平均节奏（含休息），不把最近几小时的爆发当成 24 小时不停跑；
- *   - 睡一觉回来最近 6 小时是 0，预测仍走平均，不能说「永远用不完」；
+ *   - 预测用墙钟平均（已用 ÷ 窗口已过时间），关机和睡觉的时间留在分母里；
+ *   - 最近几小时的爆发只进 projectedHigh，不拿它当结论（0.17.6 就是这么把 9% 外推成 135% 的）；
+ *   - 睡一觉回来最近 24 小时是 0，预测仍走平均，不能说「永远用不完」；
  *   - 窗口里百分比掉下来（重置 / 用了重置次数）之前的点不能算进速度；
  *   - 采样之后已经到点重置：按新窗口从 0 算，别拿上周的 95% 报警；
  *   - 已用不到 2% 不折算整窗额度（整数百分比误差太大）；
@@ -72,11 +73,13 @@ try {
   {
     const report = analyzeAccount("claude", hourlySamples(10, 40, 50), steadyRows(), NOW);
     const w = report.week;
-    check("最近 6 小时每小时涨 1 个点", near(w.recentPerH, 1), String(w.recentPerH));
-    check("整个窗口观测到的平均速度是每小时 1 个点", near(w.averagePerH, 1), String(w.averagePerH));
-    check("预测使用多个采样区间的稳健速度", near(w.ratePerH, 1), String(w.ratePerH));
-    check("重置时按持续速度推算会超过 100%，提前用完", near(w.projectedAtReset, 122) && w.runsOutBeforeReset, `${w.projectedAtReset} ${w.etaAt}`);
-    check("提前用完判成严重，不被低估成有点紧", report.health.reason === "runs-out", JSON.stringify(report.health));
+    check("最近 24 小时每小时涨 1 个点", near(w.recentPerH, 1), String(w.recentPerH));
+    // 窗口已经走了 96 小时、总共用掉 50%：墙钟平均就是 0.52%/h，哪怕最近 10 小时在猛用
+    check("平均速度按墙钟算（含没采样的时间）", near(w.averagePerH, 50 / 96), String(w.averagePerH));
+    check("预测用平均速度，不用最近的爆发", near(w.ratePerH, 50 / 96), String(w.ratePerH));
+    check("重置时按平均推算 87.5%，不算提前用完", near(w.projectedAtReset, 87.5) && !w.runsOutBeforeReset, `${w.projectedAtReset}`);
+    check("最近的爆发只进上限：按它推是 122%", near(w.projectedHigh, 122) && near(w.fastPerH, 1), `${w.projectedHigh} ${w.fastPerH}`);
+    check("上限会超 100 时提示有点紧，而不是断言会提前用完", report.health.reason === "tight", JSON.stringify(report.health));
     // 96 小时 × 100 万 = 9600 万 token，已用 50% → 整周 1.92 亿；花费同理 $96 → $192
     check(
       "折算整周额度 = 窗口用量 ÷ 已用百分比",
@@ -91,8 +94,9 @@ try {
     const samples = [...hourlySamples(10, 50, 50)];
     const report = analyzeAccount("claude", samples, steadyRows(), NOW);
     const w = report.week;
-    check("最近是 0 且没有上涨样本时不生成速度", near(w.recentPerH, 0) && w.ratePerH === undefined, `${w.recentPerH} / ${w.ratePerH}`);
-    check("没有可靠速度时保持健康，不虚构预计用完时间", w.projectedAtReset === undefined && report.health.reason === "ok", `${w.projectedAtReset} ${report.health.reason}`);
+    check("最近 24 小时没涨，最近速度是 0", near(w.recentPerH, 0), String(w.recentPerH));
+    // 已经用掉的 50% 是真金白银，不能因为最近没动就当作没用过
+    check("仍按墙钟平均预测", near(w.ratePerH, 50 / 96) && near(w.projectedAtReset, 87.5), `${w.ratePerH} / ${w.projectedAtReset}`);
   }
 
   // ---- 3. 窗口里用了一次重置：掉下来之前的点不算 ----
@@ -188,10 +192,28 @@ try {
     const report = analyzeAccount("claude", hourlySamples(10, 40, 50), rows, NOW);
     const w = report.week;
     check("大约三分之一的时间在用", near(w.activeShare, 32 / 96), String(w.activeShare));
-    check("有休息也不改用最近爆发去外推", near(w.ratePerH, 1) && w.runsOutBeforeReset, String(w.ratePerH));
+    check("有休息也不改用最近爆发去外推", near(w.ratePerH, 50 / 96) && !w.runsOutBeforeReset, String(w.ratePerH));
   }
 
-  // ---- 10. 采样器 ----
+  // ---- 10. 真实场景回归（2026-09-16 的 Claude 账号）----
+  {
+    // 窗口 09-15 起，28.8 小时里用掉 9%，还剩 139 小时才重置。
+    const reset = NOW + 139 * HOUR_MS;
+    const start = reset - WEEK_MS;
+    const samples = [];
+    for (let at = start + 0.5 * HOUR_MS; at <= NOW; at += HOUR_MS) {
+      const hours = (at - start) / HOUR_MS;
+      // 前 16 小时几乎没用，后面集中用掉 9%
+      samples.push({ at, week: hours < 16 ? 0 : Math.round(((hours - 16) / 12.8) * 9), weekReset: iso(reset) });
+    }
+    const report = analyzeAccount("claude", samples, [], NOW);
+    const w = report.week;
+    check("集中使用后仍按墙钟平均算（约 0.31%/h）", near(w.ratePerH, 9 / 28.8, 0.02), String(w.ratePerH));
+    check("重置时约 52%，不是「提前两天用完」", w.projectedAtReset < 60 && !w.runsOutBeforeReset, String(w.projectedAtReset));
+    check("这种情况判成健康", report.health.reason === "ok", JSON.stringify(report.health));
+  }
+
+  // ---- 11. 采样器 ----
   {
     const t0 = Date.UTC(2026, 8, 13, 0, 0, 0);
     const map = (week) => ({ claude: { name: "Claude 账号", weekPct: week, fiveHourPct: 5, weekReset: iso(t0 + WEEK_MS) } });

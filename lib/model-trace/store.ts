@@ -2,6 +2,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import { dataDir } from "../paths";
 
+export type TraceCandidate = { model: string; name: string; probability: number };
+
 export type TraceRecord = {
   id: string;
   at: number;
@@ -11,6 +13,14 @@ export type TraceRecord = {
   family: string;
   probability: number;
   mismatch: boolean;
+  /** 指纹库里概率最高的几个型号。老记录没有。 */
+  candidates?: TraceCandidate[];
+  /** 这次用了几条有效回答（数字够长的才算）。 */
+  usedOutputs?: number;
+  /** 这次一共发了几道挑战。 */
+  queries?: number;
+  /** 判定成「这一家」的把握。 */
+  familyProbability?: number;
   conversationId?: string;
   messageId?: string;
   source: "auto" | "manual";
@@ -53,6 +63,15 @@ export async function addTraceRecord(record: TraceRecord) {
   data.records = [...data.records, record].slice(-200);
   await writeFile(data);
   return record;
+}
+
+
+/** 清空探测历史（界面上的「清空重测」）。 */
+export async function clearTraceRecords() {
+  const data = await readFile();
+  const removed = data.records.length;
+  await writeFile({ records: [] });
+  return removed;
 }
 
 export function routingRate(records: TraceRecord[]) {

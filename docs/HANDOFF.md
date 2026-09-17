@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.17.6**，安装包 `dist/AllAi-Setup-0.17.6.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.7**，安装包 `dist/AllAi-Setup-0.17.7.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -72,6 +72,9 @@ node scripts/test-i18n-ui.cjs              # 动了 lib/i18n.ts / lib/theme.ts /
 node scripts/test-quota-monitor.cjs        # 动了 lib/quota-monitor.ts / electron/quota-history.ts
 node scripts/test-quota-monitor-ui.cjs     # 动了 components/QuotaMonitor.tsx（要 dev server，见文件头）
 node scripts/test-model-trace.cjs          # 动了 lib/model-trace/
+node scripts/test-codex-delete.cjs         # 动了 electron/history.ts 的 deleteWork
+node scripts/test-model-trace-ui.cjs       # 动了 components/ModelTraceSettings.tsx（要 dev server，见文件头）
+node scripts/test-settings-order-ui.cjs    # 动了服务/接口排序或 Agent 图标（要 dev server，见文件头）
 node scripts/test-agent-session.cjs        # 动了换模型 / 交接压缩
 node scripts/test-cli-commands.cjs         # 动了 lib/cli-commands.ts
 node scripts/test-app-update.cjs           # 动了 electron/app-update.ts（要先 npm run electron:compile）
@@ -289,7 +292,7 @@ Claude `-p` + `stream-json` 必须带 `--verbose`，否则直接报错。Grok �
 | 归属 | 同上 `files[].official` / `kind` | Codex 看会话开头 `session_meta.model_provider`（`openai` 才算）；Claude Code / Grok 会话里不记，看全局配置（`~/.claude/settings.json` 的 env、`~/.grok/config.toml` 的 `base_url`），见 `configOfficial`。 |
 | 计算 | `lib/quota-monitor.ts`（纯函数） | 口径写在文件头，见约定 98。 |
 | 接口 | `app/api/quota-monitor` | 本机官方会话 + AllAi 官方登录聊天（usage.json 里 source 是「Claude 账号」这种；那些 CLI 会话在 `~/.allai/*-chat`，扫描器本来就跳过，不会重复）。没采到过额度的账号不返回。 |
-| 界面 | `components/QuotaMonitor.tsx` | 手写 SVG。配色 `--series-*`（模型占比，按型号第一次出现的先后排座次，不按排名）/ `--status-*`（只表示好坏，配图标和文字）在 `app/globals.css`。 |
+| 界面 | `components/QuotaMonitor.tsx`（周窗口的卡片按 `week ?? five` 算；两个窗口都在时，5 小时的折合和消耗单独补一组，只有周额度的账号不显示） | 手写 SVG。配色 `--series-*`（模型占比，按型号第一次出现的先后排座次，不按排名）/ `--status-*`（只表示好坏，配图标和文字）在 `app/globals.css`。 |
 
 额度接口的原始返回（结构，2026-09 实测）：Claude `five_hour` / `seven_day` 各有整数 `utilization` + `resets_at`，没有按型号拆的窗口（`seven_day_opus` 等都是 null）；ChatGPT `rate_limit.primary_window`（5 小时）/ `secondary_window`（7 天）各有 `used_percent`、`reset_at`（秒）、`limit_window_seconds`，外加 `plan_type`；Grok `config.currentPeriod.start/end` 直接给出周窗口起止。
 
@@ -316,7 +319,11 @@ Claude `-p` + `stream-json` 必须带 `--verbose`，否则直接报错。Grok �
 
 自动探测挂在 HTTP 聊天 `send()` 流结束后，以及官方聊天 `done` 之后。**操控电脑的循环步不测**。Agent 会话不测。
 
-回归：`node scripts/test-model-trace.cjs`。动了 `chat-run.ts` 的参数拼装还要 `node scripts/test-cli-args.cjs`。
+「清空重测」走 `DELETE /api/model-trace`，只清记录，不动指纹库和自动探测开关。
+
+回归：`node scripts/test-model-trace.cjs`、`scripts/test-model-trace-ui.cjs`（界面）。动了 `chat-run.ts` 的参数拼装还要 `node scripts/test-cli-args.cjs`。
+
+指纹库 `data/model-trace/unified_bank.json` 和上游 `xqy2006/ModelTrace` 的 `data/unified_bank.json` **保持字节一致**（当前是 2026-09-05 的 astra 更新）。要升级就整份换掉，别手改；上游的算法文件（`fingerprint.py` / `challenge_suite.py`）自 2026-08-27 起没动过。记录里的 `candidates` / `usedOutputs` / `familyProbability` 是 0.17.7 加的，老记录没有，界面要能容忍缺失。
 
 ---
 
@@ -639,10 +646,12 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
    服务端不知道界面语言，直接调 `compactNotice()` 拿中文；界面调 `t(COMPACT_NOTICE, vars)`。
    同理，新增带变量的文案时**别把数字拼进模板**。
 98. **额度监控的预计用完时间用窗口内持续采样的稳健速度。** 速度来自满足最小观察跨度的正向区间涨幅中位数，至少要有两次独立上涨才外推；单次突发跳涨或没有上涨样本时不虚构 ETA。窗口百分比掉下来（到点重置 / 用了重置次数）之前的点不算；采样之后已经过了重置点，按新窗口从 0 算。折算整窗额度仍要求已用 >= 2%，因为 Claude 的 utilization 是整数，1% 时误差能放大几十倍。改口径先改 `scripts/test-quota-monitor.cjs`。
-99. **额度监控只算走官方账号的用量；归属判断不出来就不算，并在界面上写明排除了多少。** Grok 会话文件不记走哪个接口，用户本机 Grok 又配了中转地址，所以 Grok Build 会话全部排除 —— 宁可 Grok 的折算算不出来，也不能把中转站的 token 算进官方额度。已知局限：AllAi 里用「API 接口」跑的 Claude Code / Grok 是临时注入环境变量的，会话文件看不出来，会跟着全局配置走（界面说明里写了）。
+99. **额度监控只算走官方账号的用量；归属按配置判断，不是按名字。** Codex 的 `model_provider` 是 `~/.codex/config.toml` 里**配置块的名字**，官方直登完全可以叫 `custom`（`requires_openai_auth = true`、没有 `base_url` / `env_key`）—— 0.17.6 只认 `openai`/`chatgpt` 字面值，把这种会话全判成中转，用户的「周额度折合」永远算不出来。判定顺序：配置块 → 账本里记住的旧判定（`codexProviders`，防止中转块被删/改名后翻案）→ 本机是不是 ChatGPT 登录；**用 API Key 跑的一律不算订阅额度**。归属要在「文件没变就跳过」**之前**每轮重判（`applyAttribution`），否则改配置、重新登录都不生效。Grok 会话文件不记接口，本机配了中转就整体排除，界面照实写明排除了多少。回归：`node scripts/test-usage-scan.cjs`。
 100. **模型溯源测 OpenAI / Claude：HTTP 走 Key，官方登录走本机 CLI。** 自动探测是回复后再发一条整数生成挑战，**不是**拿那条聊天正文做指纹。官方 Claude / ChatGPT 用 `official-probe` 在 `~/.allai/model-trace/` 开一轮 print，不要 resume 用户的聊天会话，也不要进 Agent 列表。Grok 指纹库没有，不测。操控电脑循环和 Agent 会话不要测。挑战原文发给模型，不要进 i18n。`gpt-5` 这种对不上指纹库的型号只比家族，禁止用双向 `includes` 去撞 `gpt-5.4`。
 101. **AllAi 自己的更新走 `electron/app-update.ts`（electron-updater），和本机 CLI 的更新（约定 57）是两回事，别混。** 更新源是 GitHub Release，仓库地址不写在代码里 —— electron-builder 打包时把 git remote 的 owner/repo 写进 `resources/app-update.yml`，electron-updater 自己读。**发版附件必须有 `latest.yml` 和 `.blockmap`**，少了 `latest.yml` 谁也更新不动。查到就地后台下载（`autoDownload = false`，我们自己在 `update-available` 里下），**默认不打断用户**：下好了退出时自动装（`autoInstallOnAppQuit`），设置 → 关于里能立刻重启。状态一律写在界面上，**不弹窗**（约定 22）。持久化只留 `latest` / `error` / `downloaded` 三种状态，`checking` / `downloading` 是这一轮的临时状态，重启不许接着显示。测试用 `ALLAI_UPDATE_FEED` 换源，别在测试里连真 GitHub。回归 `scripts/test-app-update.cjs`。
 102. **安装包是向导（`oneClick: false` + `allowToChangeInstallationDirectory` + `packaging/installer.nsh`），但自动更新必须静默。** 安装包会让用户选装给谁、装到哪、要不要快捷方式；更新时绝对不能再弹这个向导 —— 所以 `quitAndInstall` 第一个参数（isSilent）**必须是 true**，它会给安装包传 `/S --updated`，assisted 模板的 `skipPageIfUpdated` 会跳过所有页面。改这个参数前先想一遍：非静默 = 每次自动更新都在用户面前弹一遍向导。`packaging/installer.nsh` 里那句「`$launchLink` 删了开始菜单链接要指回 exe」也别删：完成页的「运行」和更新的 `--force-run` 都靠它，指错了更新完起不来。**写那个文件记住它在生成脚本最前面被 include**，`${if}` / `${NSD_*}` 那时还没定义，所以函数必须写在宏体里（`!macro customPageAfterChangeDir` 内），写顶层会 `!include: error in script`。
+103. **删 Codex 会话要删掉整条会话的全部 rollout 分片。** 一条会话会被拆成多个 `rollout-*.jsonl`（scanCodex 按 `cliSessionId` 分组），只删 `messagesFile` 那一个，剩下的分片下次扫描又会凑回同一条 —— 用户看到的就是「删了又回来」。`codex delete` 要带 `--force`（0.154 起非交互终端会拒绝，**而且照样退出 0**，所以绝不能只看退出码），删完一律核实文件真的没了。sqlite（`state_5.sqlite`）里的孤儿行不用管：扫描时文件不存在就跳过。回归：`node scripts/test-codex-delete.cjs`。
+104. **额度预测用墙上时钟的平均速度：已用% ÷ 窗口已过时间。** 睡觉、关机、开会的时间必须留在分母里 —— 额度按墙钟重置，而已用百分比是窗口累计值，关机期间的消耗不会丢。0.17.6 试过「只取上涨区间的中位数」，等于假设 24 小时不停跑，实测把 9% 外推成 135%（真实 53%），用户直接被吓到。最近一天的节奏只进 `fastPerH` / `projectedHigh`，用来提示「最快什么时候用完」，**不参与结论**；只有按平均也会超 100% 才说会提前用完。改口径先改 `scripts/test-quota-monitor.cjs`（里面有一条用真实数据还原的回归）。
 
 ---
 
@@ -654,7 +663,9 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 | `components/I18n.tsx` | 界面语言上下文：`useT()` / `LangProvider`，挂在 page 最外层 |
 | `lib/i18n.ts` | 中文原文当 key 的词典；语言存 `allai-lang` |
 | `components/ChatApp.tsx` | 聊天/Agent/创作总控，发送分支 |
-| `components/SettingsDialog.tsx` | 设置外壳 + 标签页（通用/模型与接口/Skills/用量/额度监控/溯源/远程/关于） |
+| `components/SettingsDialog.tsx` | 设置外壳 + 标签页（通用/模型与接口/Skills/用量/额度监控/溯源/远程/关于）；服务排序（`PUT /api/providers`，只发 id 顺序）、Agent 列表图标 |
+| `components/OrderButtons.tsx` | 列表里的上移/下移（键盘用）。**按钮不能嵌套**，整行是按钮时要放在它外面 |
+| `components/useDragOrder.ts` | 拖拽排序。**draggable 挂在手柄上，不是整行** —— 整行可拖的话，行里输入框划词会变成拖行；`moveItem` 是纯函数 |
 | `components/AgentSettingsDialog.tsx` | 单个 Agent 的接口/登录/同步模型 |
 | `components/GlobalEndpoints.tsx` | 全局提供商池的编辑界面（`/api/agent-endpoints`） |
 | `components/TitleBar.tsx` | 自己的标题栏（窗口是 `frame: false`） |
@@ -824,7 +835,7 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.17.6**，安装包 `dist/AllAi-Setup-0.17.6.exe`，桌面快捷方式已更新。
+当前发版 **0.17.7**，安装包 `dist/AllAi-Setup-0.17.7.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 
@@ -832,7 +843,9 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 **最近刚做完（0.17.5）：** 安装包从「双击就装」改成向导：选装给谁、选目录、两个快捷方式勾选框、完成页可勾「运行 AllAi」。自动更新仍然静默，不会弹向导。见约定 102。
 
-**最近刚做完（0.17.6）：** 使用统计的时间范围改成带预设和分钟级自定义日历的二级面板；额度预测改用持续采样的稳健速度；Codex 扫描器会升级旧缓存并重新识别官方 ChatGPT 会话，额度监控还兼容 AllAi 官方聊天来源的格式差异。
+**最近刚做完（0.17.7）：** 修掉 Codex「对话删了又回来」（一条会话有多个 rollout 分片，只删了一个）；额度预测改回墙钟平均，不再把爆发速度当结论；溯源专区重做（指标 + 趋势图 + 按型号 + 候选排名）。见约定 103、104。
+
+**更早（0.17.6）：** 使用统计的时间范围改成带预设和分钟级自定义日历的二级面板；额度预测改用持续采样的稳健速度；Codex 扫描器会升级旧缓存并重新识别官方 ChatGPT 会话，额度监控还兼容 AllAi 官方聊天来源的格式差异。
 
 **0.17.6 验证记录：** `check-client-imports`、应用/Electron TypeScript、ESLint、生产构建、`test-quota-monitor.cjs`（27/27）和 `test-usage-scan.cjs`（18/18）已通过；打包运行时检查也通过。`test-quota-monitor-ui.cjs` 在本机启动 Electron 时遇到 GPU 进程不可用和 Chromium 缓存目录拒绝访问，未进入应用断言，需在 GPU/缓存权限正常的环境补跑。
 

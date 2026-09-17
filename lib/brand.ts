@@ -333,6 +333,26 @@ export function writeProviderIcon(icons: BrandIcons, providerId: string, icon: s
   return next;
 }
 
+/** Agent 自己的图标 key。和接口图标分开放，免得 id 撞车。 */
+export function agentIconKey(agentId: string) {
+  return `agent:${agentId || ""}`.toLowerCase();
+}
+
+/** 给某个 Agent 写/清图标。 */
+export function writeAgentIcon(icons: BrandIcons, agentId: string, icon: string): BrandIcons {
+  const next = { ...icons };
+  const key = agentIconKey(agentId);
+  if (icon) next[key] = icon;
+  else delete next[key];
+  return next;
+}
+
+/** 这个 Agent 配的图标，没配就返回 null（界面回落到默认图标）。 */
+export function agentIcon(icons: BrandIcons, agentId: string): string | null {
+  if (!agentId) return null;
+  return icons[agentIconKey(agentId)] || null;
+}
+
 /**
  * 某一条服务自己的图标。只给服务那一行用，
  * 旗下模型不走这里 —— 聚合站上各家还是各画各的。
