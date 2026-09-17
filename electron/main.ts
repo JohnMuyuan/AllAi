@@ -5,6 +5,14 @@ import net from "net";
 import path from "path";
 import { destroyChatGpt, hideChatGpt, showChatGpt } from "./chatgpt-view";
 import { openLogStream } from "./log";
+import { readMainPrefs } from "./db";
+import {
+  destroyTray,
+  initTray,
+  markBackgroundHintShown,
+  needsBackgroundHint,
+  shouldHideOnClose,
+} from "./tray";
 import {
   beginComputer,
   captureScreen,
@@ -230,6 +238,9 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 收进托盘后窗口是隐藏的；不关掉节流，Chromium 会把渲染进程的定时器压到
+      // 每分钟一次，手机那头发来的指令要等好久才动 —— 后台常驻就白做了。
+      backgroundThrottling: false,
     },
   });
 
@@ -240,6 +251,18 @@ async function createWindow() {
   mainWindow.webContents.on("did-fail-load", (_event, code, desc, url) => {
     dialog.showErrorBox("AllAi 界面加载失败", `${desc} (${code})\n${url}`);
   });
+  mainWindow.on("close", (event) => {
+    if (!shouldHideOnClose({ quitting, closeToTray: readMainPrefs().closeToTray })) return;
+    event.preventDefault();
+    mainWindow?.hide();
+    // 内嵌的 ChatGPT 视图是独立一层，不收起来会浮在桌面上
+    hideChatGpt();
+    if (needsBackgroundHint()) {
+      markBackgroundHintShown();
+      showNotice("AllAi 还在后台运行", "远程控制和额度监控继续工作。右下角托盘图标可以重新打开，或从那里退出。");
+    }
+  });
+
   mainWindow.on("closed", () => {
     mainWindow = null;
     setNotifyWindow(null);
@@ -400,6 +423,14 @@ function registerIpc() {
   });
 }
 
+/** 真的要退出了（托盘菜单、系统关机、安装更新）。关窗口不算。 */
+let quitting = false;
+
+function quitApp() {
+  quitting = true;
+  app.quit();
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -450,6 +481,8 @@ if (!gotLock) {
     });
     try {
       await createWindow();
+      // 托盘一直在：软件本来就该能在后台待着
+      initTray({ show: revealWindow, quit: quitApp });
     } catch (error) {
       const message = error instanceof Error ? error.stack || error.message : String(error);
       dialog.showErrorBox("AllAi 启动失败", message);
@@ -458,6 +491,9 @@ if (!gotLock) {
   });
 
   app.on("before-quit", () => {
+    // 走到这儿就是真退出了（托盘菜单、关机、装更新），关窗口那条路不会到这里
+    quitting = true;
+    destroyTray();
     stopRemote();
     destroyChatGpt();
     killAll();
@@ -465,6 +501,9 @@ if (!gotLock) {
   });
 
   app.on("window-all-closed", () => {
+    // 收进托盘时窗口是隐藏不是关闭，正常不会走到这儿；
+    // 真走到了（比如窗口被销毁）也别退出，托盘还得留着。
+    if (!quitting && readMainPrefs().closeToTray) return;
     killAll();
     app.quit();
   });

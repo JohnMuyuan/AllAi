@@ -1481,6 +1481,14 @@ const EN: Record<string, string> = {
   "已清空探测记录": "Check records cleared",
 
   "拖动排序": "Drag to reorder",
+
+  /* 托盘常驻（0.17.8） */
+  "关闭窗口时": "When the window is closed",
+  "AllAi 收进右下角托盘继续跑：手机远程控制、每 5 分钟一次的额度采样都要进程活着。真退出走托盘图标的右键菜单。": "AllAi keeps running in the tray: remote control from your phone and the quota sample every 5 minutes both need the process alive. To really quit, use the tray icon right-click menu.",
+  "收进托盘继续运行": "Keep running in the tray",
+  "默认。远程控制和额度监控不中断": "Default. Remote control and quota monitoring keep working",
+  "直接退出": "Quit",
+  "关掉窗口就结束进程，远程控制会断开": "Closing the window ends the process and disconnects remote control",
 };
 
 

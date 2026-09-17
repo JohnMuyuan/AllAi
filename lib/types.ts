@@ -62,6 +62,8 @@ export type AppPrefs = {
   notifyAgentDone: boolean;
   /** 官方额度到 80% / 90% 时提醒。 */
   notifyQuota: boolean;
+  /** 关闭窗口时收进托盘继续跑（远程控制和额度采样要常驻）。 */
+  closeToTray: boolean;
   /** 聊天回复后探测 OpenAI / Claude 是否被路由到别的型号。 */
   modelTraceEnabled: boolean;
 };
@@ -346,6 +348,7 @@ export const emptyPrefs = (): AppPrefs => ({
   computerMaxSteps: 15,
   notifyAgentDone: true,
   notifyQuota: true,
+  closeToTray: true,
   modelTraceEnabled: true,
   brandIcons: {},
   webSearchChat: false,

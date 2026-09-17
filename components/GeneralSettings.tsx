@@ -82,6 +82,21 @@ export function GeneralSettings({
         />
       </Row>
       <Row
+        title={t("关闭窗口时")}
+        hint={t("AllAi 收进右下角托盘继续跑：手机远程控制、每 5 分钟一次的额度采样都要进程活着。真退出走托盘图标的右键菜单。")}
+      >
+        <OptionSelect
+          label={t("关闭窗口时")}
+          value={prefs.closeToTray === false ? "quit" : "tray"}
+          onChange={(value) => onChange({ closeToTray: value === "tray" })}
+          options={[
+            { value: "tray", label: t("收进托盘继续运行"), description: t("默认。远程控制和额度监控不中断") },
+            { value: "quit", label: t("直接退出"), description: t("关掉窗口就结束进程，远程控制会断开") },
+          ]}
+        />
+      </Row>
+
+      <Row
         title={t("输入框下的统计行")}
         hint={t("聊天输入框下面显示一行小字：输出速度、上下文长度、这条对话累计消耗、缓存命中率、当前模型来源等，显示哪几项可以自己选。用官方登录账号时还会显示该账号近 5 小时 / 近 7 天的用量。")}
       >

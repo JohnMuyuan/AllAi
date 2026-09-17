@@ -1,6 +1,6 @@
 # AllAi 交接
 
-给下一轮对话或下一个人用。当前发版 **0.17.7**，安装包 `dist/AllAi-Setup-0.17.7.exe`。
+给下一轮对话或下一个人用。当前发版 **0.17.8**，安装包 `dist/AllAi-Setup-0.17.8.exe`。
 逐条发版见仓库根目录 `CHANGELOG.md`。
 
 ## 接手先读这三段
@@ -75,6 +75,7 @@ node scripts/test-model-trace.cjs          # 动了 lib/model-trace/
 node scripts/test-codex-delete.cjs         # 动了 electron/history.ts 的 deleteWork
 node scripts/test-model-trace-ui.cjs       # 动了 components/ModelTraceSettings.tsx（要 dev server，见文件头）
 node scripts/test-settings-order-ui.cjs    # 动了服务/接口排序或 Agent 图标（要 dev server，见文件头）
+ALLAI_DATA_DIR=<临时目录> node_modules/electron/dist/electron.exe scripts/test-tray.cjs   # 动了托盘或关窗口的行为
 node scripts/test-agent-session.cjs        # 动了换模型 / 交接压缩
 node scripts/test-cli-commands.cjs         # 动了 lib/cli-commands.ts
 node scripts/test-app-update.cjs           # 动了 electron/app-update.ts（要先 npm run electron:compile）
@@ -652,6 +653,7 @@ iPhone 主屏幕 App 里已经能看到「扫码配对」。**用真实手机扫
 102. **安装包是向导（`oneClick: false` + `allowToChangeInstallationDirectory` + `packaging/installer.nsh`），但自动更新必须静默。** 安装包会让用户选装给谁、装到哪、要不要快捷方式；更新时绝对不能再弹这个向导 —— 所以 `quitAndInstall` 第一个参数（isSilent）**必须是 true**，它会给安装包传 `/S --updated`，assisted 模板的 `skipPageIfUpdated` 会跳过所有页面。改这个参数前先想一遍：非静默 = 每次自动更新都在用户面前弹一遍向导。`packaging/installer.nsh` 里那句「`$launchLink` 删了开始菜单链接要指回 exe」也别删：完成页的「运行」和更新的 `--force-run` 都靠它，指错了更新完起不来。**写那个文件记住它在生成脚本最前面被 include**，`${if}` / `${NSD_*}` 那时还没定义，所以函数必须写在宏体里（`!macro customPageAfterChangeDir` 内），写顶层会 `!include: error in script`。
 103. **删 Codex 会话要删掉整条会话的全部 rollout 分片。** 一条会话会被拆成多个 `rollout-*.jsonl`（scanCodex 按 `cliSessionId` 分组），只删 `messagesFile` 那一个，剩下的分片下次扫描又会凑回同一条 —— 用户看到的就是「删了又回来」。`codex delete` 要带 `--force`（0.154 起非交互终端会拒绝，**而且照样退出 0**，所以绝不能只看退出码），删完一律核实文件真的没了。sqlite（`state_5.sqlite`）里的孤儿行不用管：扫描时文件不存在就跳过。回归：`node scripts/test-codex-delete.cjs`。
 104. **额度预测用墙上时钟的平均速度：已用% ÷ 窗口已过时间。** 睡觉、关机、开会的时间必须留在分母里 —— 额度按墙钟重置，而已用百分比是窗口累计值，关机期间的消耗不会丢。0.17.6 试过「只取上涨区间的中位数」，等于假设 24 小时不停跑，实测把 9% 外推成 135%（真实 53%），用户直接被吓到。最近一天的节奏只进 `fastPerH` / `projectedHigh`，用来提示「最快什么时候用完」，**不参与结论**；只有按平均也会超 100% 才说会提前用完。改口径先改 `scripts/test-quota-monitor.cjs`（里面有一条用真实数据还原的回归）。
+105. **关窗口是隐藏，不是退出。** 远程控制和额度采样都在主进程里跑，进程一退就断，所以 `mainWindow.on("close")` 默认 `preventDefault` 再 `hide()`（开关是 `prefs.closeToTray`，主进程每次现读 `readMainPrefs()`，改完不用重启）。真退出只有三条路：托盘菜单、系统关机、装更新 —— 它们都会经过 `before-quit`，那里把 `quitting` 置位，close 就不再拦。窗口的 `backgroundThrottling` 必须关掉：隐藏后 Chromium 会把渲染进程定时器压到每分钟一次，手机指令会卡住。托盘图标一直在（`electron/tray.ts`），第一次收起来发一次通知。回归：`scripts/test-tray.cjs`。
 
 ---
 
@@ -835,7 +837,7 @@ IPC 名字在 `electron/preload.ts` / `electron/main.ts` / `electron/pty.ts`。�
 
 ## 下一轮可以从这里接着
 
-当前发版 **0.17.7**，安装包 `dist/AllAi-Setup-0.17.7.exe`，桌面快捷方式已更新。
+当前发版 **0.17.8**，安装包 `dist/AllAi-Setup-0.17.8.exe`，桌面快捷方式已更新。
 没有排期，按用户下一句话走。
 接手时先读本文件 + `CHANGELOG.md` 最近几条，再读对应源码。Next 16 以 `node_modules/next/dist/docs/` 为准。
 

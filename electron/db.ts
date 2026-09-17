@@ -62,16 +62,27 @@ function readDb(): {
   agents?: AgentRecord[];
   providers?: ProviderRecord[];
   agentEndpoints?: AgentEndpoint[];
+  prefs?: { closeToTray?: boolean };
 } | null {
   try {
     return JSON.parse(fs.readFileSync(dbFile(), "utf8")) as {
       agents?: AgentRecord[];
       providers?: ProviderRecord[];
       agentEndpoints?: AgentEndpoint[];
+      prefs?: { closeToTray?: boolean };
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * 主进程要用的那几项设置。界面写进 db.json，这里每次现读 ——
+ * 用户在设置里改完开关，下一次关窗口就按新的来，不用重启。
+ */
+export function readMainPrefs(): { closeToTray: boolean } {
+  const prefs = readDb()?.prefs;
+  return { closeToTray: prefs?.closeToTray !== false };
 }
 
 export function readAgent(id: string, endpointId?: string): AgentRecord | null {
